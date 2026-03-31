@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>학원 보고서 시스템 신청</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f6fb;--surface:#fff;--surface2:#f0f2f8;--border:#e2e6ef;
+  --accent:#3b6ef6;--accent-light:#eef2fe;--accent-dark:#2550c0;
+  --green:#12b886;--green-light:#e6faf3;
+  --orange:#f76707;--red:#e64980;
+  --text:#1a1f36;--text2:#515872;--text3:#9ba3b8;
+  --radius:16px;--radius-sm:10px;
+  --shadow:0 2px 12px rgba(0,0,0,.06);--shadow-lg:0 8px 30px rgba(0,0,0,.1);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+
+/* layout */
+.page{max-width:640px;margin:0 auto;padding:0 16px 120px}
+
+/* header */
+.hero{text-align:center;padding:48px 20px 32px;position:relative}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;background:var(--accent-light);color:var(--accent);font-size:11px;font-weight:700;padding:5px 14px;border-radius:20px;letter-spacing:.5px;margin-bottom:16px}
+.hero h1{font-size:24px;font-weight:900;line-height:1.35;margin-bottom:10px}
+.hero h1 span{color:var(--accent)}
+.hero p{font-size:14px;color:var(--text2);line-height:1.7}
+
+/* progress */
+.progress-wrap{position:sticky;top:0;z-index:50;background:rgba(244,246,251,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:14px 0 10px;border-bottom:1px solid var(--border)}
+.progress-bar{height:4px;background:var(--surface2);border-radius:4px;overflow:hidden;margin-bottom:10px}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),#5a82f8);border-radius:4px;transition:width .4s cubic-bezier(.16,1,.3,1)}
+.progress-steps{display:flex;justify-content:space-between}
+.progress-step{font-size:10px;font-weight:600;color:var(--text3);transition:color .2s}
+.progress-step.active{color:var(--accent)}
+.progress-step.done{color:var(--green)}
+
+/* card */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:16px;overflow:hidden}
+.card-head{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.card-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.card-icon.blue{background:var(--accent-light)}.card-icon.green{background:var(--green-light)}.card-icon.orange{background:#fff3e8}.card-icon.red{background:#fde9f0}.card-icon.purple{background:#f3e8ff}
+.card-title{font-size:15px;font-weight:700}
+.card-desc{font-size:11px;color:var(--text3);margin-top:2px}
+.card-body{padding:22px}
+
+/* form */
+.field{margin-bottom:18px}
+.field:last-child{margin-bottom:0}
+.field-label{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:5px}
+.field-label .req{color:var(--red);font-weight:800}
+.field-hint{font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5}
+.field-hint a{color:var(--accent);text-decoration:none;font-weight:600}
+
+input[type=text],input[type=tel],input[type=email],textarea,select{
+  width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:8px;
+  font-size:14px;font-family:inherit;color:var(--text);background:var(--surface);
+  transition:border .15s,box-shadow .15s;outline:none}
+input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,110,246,.1)}
+textarea{resize:vertical;min-height:100px}
+select{cursor:pointer;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ba3b8'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:480px){
+  .row{grid-template-columns:1fr}
+  .hero{padding:32px 12px 24px}
+  .hero h1{font-size:20px}
+  .hero p{font-size:13px}
+  .hero p br{display:none}
+  .card-body{padding:16px}
+  .card-head{padding:14px 16px}
+  .field-label{font-size:11px}
+  input[type=text],input[type=tel],input[type=email],textarea,select{font-size:16px;padding:10px 12px}
+  .chip{padding:7px 12px;font-size:12px}
+  .progress-step{font-size:9px}
+}
+@media(max-width:360px){
+  .page{padding:0 10px 100px}
+  .hero h1{font-size:18px}
+  .card-body{padding:12px}
+  .chip{padding:6px 10px;font-size:11px}
+  .btn-lg{padding:14px 20px;font-size:14px}
+}
+
+/* color input */
+.color-input{display:flex;gap:10px;align-items:center}
+.color-input input[type=color]{width:44px;height:38px;border:2px solid var(--border);border-radius:8px;cursor:pointer;padding:2px;background:none;-webkit-appearance:none}
+.color-input input[type=color]::-webkit-color-swatch-wrapper{padding:2px}
+.color-input input[type=color]::-webkit-color-swatch{border-radius:4px;border:none}
+.color-input input[type=text]{flex:1}
+
+/* chip select (multi) */
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:8px 16px;border:1.5px solid var(--border);border-radius:20px;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;user-select:none;background:var(--surface);-webkit-tap-highlight-color:transparent}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.chip.selected{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* radio cards */
+.radio-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media(max-width:400px){.radio-cards{grid-template-columns:1fr}}
+.radio-card{padding:14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;transition:all .15s;text-align:center;-webkit-tap-highlight-color:transparent}
+.radio-card:hover{border-color:var(--accent)}
+.radio-card.selected{border-color:var(--accent);background:var(--accent-light)}
+.radio-card-icon{font-size:22px;margin-bottom:6px}
+.radio-card-label{font-size:13px;font-weight:600}
+.radio-card-desc{font-size:11px;color:var(--text3);margin-top:3px}
+.radio-cards.triple{grid-template-columns:1fr 1fr 1fr}
+@media(max-width:480px){.radio-cards.triple{grid-template-columns:1fr 1fr}}
+@media(max-width:360px){.radio-cards.triple{grid-template-columns:1fr}.radio-cards{grid-template-columns:1fr}}
+
+/* section order (drag) */
+.order-list{display:flex;flex-direction:column;gap:6px}
+.order-item{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:500;cursor:grab}
+.order-item:active{cursor:grabbing}
+.order-num{width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
+.order-grip{color:var(--text3);font-size:14px;margin-left:auto;cursor:grab}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 24px;border:none;border-radius:10px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap;-webkit-tap-highlight-color:transparent}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(59,110,246,.3)}
+.btn-primary:hover{background:var(--accent-dark)}
+.btn-secondary{background:var(--surface);color:var(--text2);border:1.5px solid var(--border)}
+.btn-success{background:var(--green);color:#fff;box-shadow:0 2px 8px rgba(18,184,134,.3)}
+.btn-lg{padding:16px 32px;font-size:15px;border-radius:12px;width:100%}
+
+.nav-buttons{display:flex;gap:10px;margin-top:24px}
+.nav-buttons .btn{flex:1}
+
+/* step sections */
+.step{display:none}.step.active{display:block}
+
+/* success */
+.success-card{text-align:center;padding:48px 24px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);box-shadow:var(--shadow)}
+.success-icon{font-size:64px;margin-bottom:16px}
+.success-title{font-size:22px;font-weight:900;margin-bottom:8px}
+.success-desc{font-size:14px;color:var(--text2);line-height:1.7}
+
+/* spinner */
+.spinner{display:inline-block;width:18px;height:18px;border:2.5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* alert */
+.alert{padding:12px 16px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:12px;display:flex;align-items:flex-start;gap:8px}
+.alert-error{background:#fde9f0;color:#c92a5e;border:1px solid #f5b8cc}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="hero">
+    <div class="hero-badge">AI Report System</div>
+    <h1><span>AI 학습 보고서</span><br>시스템 신청서</h1>
+    <p>선생님의 수업 데이터를 기반으로 학부모/학생에게<br>자동으로 전달되는 맞춤형 보고서를 제작해드립니다.</p>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:20%"></div></div>
+    <div class="progress-steps">
+      <span class="progress-step active" data-s="1">기본정보</span>
+      <span class="progress-step" data-s="2">디자인</span>
+      <span class="progress-step" data-s="3">문체&시각화</span>
+      <span class="progress-step" data-s="4">콘텐츠&KPI</span>
+      <span class="progress-step" data-s="5">레이아웃</span>
+    </div>
+  </div>
+
+  <div id="alert-area"></div>
+
+  <!-- ========== STEP 1: 기본 정보 ========== -->
+  <div class="step active" data-step="1">
+    <div class="card" style="margin-top:20px">
+      <div class="card-head">
+        <div class="card-icon blue">&#127979;</div>
+        <div><div class="card-title">기본 정보</div><div class="card-desc">학원과 선생님 정보를 입력해주세요</div></div>
+      </div>
+      <div class="card-body">
+        <div class="field">
+          <div class="field-label"><span class="req">*</span> 학원 이름</div>
+          <input type="text" id="f-academy" placeholder="예: 제이디 수학학원">
+        </div>
+        <div class="row">
+          <div class="field">
+            <div class="field-label"><span class="req">*</span> 선생님 성함</div>
+            <input type="text" id="f-teacher" placeholder="예: 김영수">
+          </div>
+          <div class="field">
+            <div class="field-label"><span class="req">*</span> 연락처</div>
+            <input type="tel" id="f-phone" placeholder="010-0000-0000">
+          </div>
+        </div>
+        <div class="field">
+          <div class="field-label"><span class="req">*</span> 샘플 보고서에 사용할 학생 이름</div>
+          <input type="text" id="f-sample-student" placeholder="예: 김민수">
+          <div class="field-hint">이 이름으로 샘플 보고서가 먼저 제작됩니다</div>
+        </div>
+      </div>
+    </div>
+    <div class="nav-buttons">
+      <button class="btn btn-primary btn-lg" onclick="nextStep()">다음 &#8594;</button>
+    </div>
+  </div>
+
+  <!-- ========== STEP 2: 디자인 ========== -->
+  <div class="step" data-step="2">
+    <div class="card" style="margin-top:20px">
+      <div class="card-head">
+        <div class="card-icon orange">&#127912;</div>
+        <div><div class="card-title">색상 & 디자인</div><div class="card-desc">보고서의 색감을 선택해주세요</div></div>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="field">
+            <div class="field-label"><span class="req">*</span> 메인 컬러</div>
+            <div class="color-input">
+              <input type="color" id="f-main-color" value="#3b6ef6">
+              <input type="text" id="f-main-color-text" placeholder="#3b6ef6" value="#3b6ef6" oninput="syncColor('main')">
+            </div>
+            <div class="field-hint"><a href="https://colorhunt.co" target="_blank">colorhunt.co</a>에서 원하는 색상을 찾아보세요</div>
+          </div>
+          <div class="field">
+            <div class="field-label"><span class="req">*</span> 서브 컬러</div>
+            <div class="color-input">
+              <input type="color" id="f-sub-color" value="#12b886">
+              <input type="text" id="f-sub-color-text" placeholder="#12b886" value="#12b886" oninput="syncColor('sub')">
+            </div>
+            <div class="field-hint"><a href="https://colorhunt.co" target="_blank">colorhunt.co</a>에서 원하는 색상을 찾아보세요</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">경고/주의 색상</div>
+          <div class="chips" data-name="warn-color">
+            <div class="chip selected" data-val="red" style="border-color:#e64980;color:#e64980" onclick="selectChip(this)">&#128308; 빨강</div>
+            <div class="chip" data-val="orange" style="border-color:#f76707;color:#f76707" onclick="selectChip(this)">&#128992; 주황</div>
+            <div class="chip" data-val="yellow" style="border-color:#f59f00;color:#f59f00" onclick="selectChip(this)">&#128993; 노랑</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">긍정 색상</div>
+          <div class="chips" data-name="positive-color">
+            <div class="chip" data-val="green" onclick="selectChip(this)">&#128994; 초록</div>
+            <div class="chip selected" data-val="blue" onclick="selectChip(this)">&#128309; 파랑</div>
+            <div class="chip" data-val="mint" onclick="selectChip(this)">&#128998; 민트</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">배경 톤</div>
+          <div class="radio-cards">
+            <div class="radio-card selected" data-name="bg-tone" data-val="light" onclick="selectRadio(this)">
+              <div class="radio-card-icon">&#9728;&#65039;</div>
+              <div class="radio-card-label">밝은 톤</div>
+              <div class="radio-card-desc">깔끔하고 밝은 느낌</div>
+            </div>
+            <div class="radio-card" data-name="bg-tone" data-val="dark" onclick="selectRadio(this)">
+              <div class="radio-card-icon">&#127769;</div>
+              <div class="radio-card-label">어두운 톤</div>
+              <div class="radio-card-desc">차분하고 고급스러운 느낌</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="nav-buttons">
+      <button class="btn btn-secondary" onclick="prevStep()">&#8592; 이전</button>
+      <button class="btn btn-primary" onclick="nextStep()">다음 &#8594;</button>
+    </div>
+  </div>
+
+  <!-- ========== STEP 3: 문체 & 시각화 ========== -->
+  <div class="step" data-step="3">
+    <div class="card" style="margin-top:20px">
+      <div class="card-head">
+        <div class="card-icon green">&#128200;</div>
+        <div><div class="card-title">시각화 & 차트</div><div class="card-desc">보고서에 포함될 차트 스타일을 선택해주세요</div></div>
+      </div>
+      <div class="card-body">
+        <div class="field">
+          <div class="field-label">선호 차트 (여러 개 선택 가능)</div>
+          <div class="chips" data-name="chart-types" data-multi="true">
+            <div class="chip selected" data-val="bar" onclick="toggleChip(this)">&#128202; 막대</div>
+            <div class="chip" data-val="line" onclick="toggleChip(this)">&#128200; 선</div>
+            <div class="chip selected" data-val="donut" onclick="toggleChip(this)">&#127849; 도넛</div>
+            <div class="chip" data-val="mixed" onclick="toggleChip(this)">&#128208; 혼합</div>
+          </div>
+        </div>
+        <div class="field">
+          <div class="field-label">그래프 톤</div>
+          <div class="radio-cards">
+            <div class="radio-card selected" data-name="graph-tone" data-val="simple" onclick="selectRadio(this)">
+              <div class="radio-card-icon">&#10024;</div>
+              <div class="radio-card-label">심플 / 미니멀</div>
+              <div class="radio-card-desc">핵심 수치만 깔끔하게</div>
+            </div>
+            <div class="radio-card" data-name="graph-tone" data-val="detailed" onclick="selectRadio(this)">
+              <div class="radio-card-icon">&#128270;</div>
+              <div class="radio-card-label">상세 / 구체적</div>
+              <div class="radio-card-desc">세부 데이터까지 포함</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon purple">&#128221;</div>
+        <div><div class="card-title">문체 & 톤</div><div class="card-desc">보고서의 어조와 대상을 선택해주세요</div></div>
+      </div>
+      <div class="card-body">
+        <div class="field">
+          <div class="field-label">문체 스타일</div>
+          <div class="radio-cards triple">
+            <div class="radio-card" data-name="writing-style" data-val="simple" onclick="selectRadio(this)">
+              <div class="radio-card-icon">&#9997;&#65039;</div>
+              <div class="radio-card-label">심플/직관적</div>
+            </div>
+            <div class="radio-card selected" data-name="writing-style" data-val="friendly" onclick="selectRadio(this)">
+              <div class="radio-card-icon">&#128522;</div>
+              <div class="radio-card-label">친근/격려</div>
+            </div>
+            <div class="radio-card" data-name="writing-style" data-val="professional" onclick="selectRadio(this)">
+              <div class="radio-card-icon">&#128188;</div>
+              <div class="radio-card-label">전문/객관적</div>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <div class="field-label">대상 구분</div>
+            <select id="f-target">
+              <option value="parent" selected>학부모 대상</option>
+              <option value="student">학생 대상</option>
+              <option value="both">통합</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="field-label">존댓말 수준</div>
+            <select id="f-honorific">
+              <option value="formal">격식체 (~합니다)</option>
+              <option value="polite" selected>친근한 존댓말 (~해요)</option>
+              <option value="casual">반말 (~해)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="nav-buttons">
+      <button class="btn btn-secondary" onclick="prevStep()">&#8592; 이전</button>
+      <button class="btn btn-primary" onclick="nextStep()">다음 &#8594;</button>
+    </div>
+  </div>
+
+  <!-- ========== STEP 4: 콘텐츠 & KPI ========== -->
+  <div class="step" data-step="4">
+    <div class="card" style="margin-top:20px">
+      <div class="card-head">
+        <div class="card-icon blue">&#127919;</div>
+        <div><div class="card-title">콘텐츠 구성</div><div class="card-desc">보고서에 담길 내용의 방향을 정해주세요</div></div>
+      </div>
+      <div class="card-body">
+        <div class="field">
+          <div class="field-label">첫 화면 우선 정보</div>
+          <div class="chips" data-name="first-screen" data-multi="true">
+            <div class="chip selected" data-val="attendance" onclick="toggleChip(this)">&#128203; 출석률</div>
+            <div class="chip selected" data-val="score-change" onclick="toggleChip(this)">&#128200; 성적 변화</div>
+            <div class="chip" data-val="homework" onclick="toggleChip(this)">&#128221; 과제 수행도</div>
+            <div class="chip" data-val="test-result" onclick="toggleChip(this)">&#128196; 테스트 결과</div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <div class="field-label">피드백 비율</div>
+            <div class="radio-cards triple">
+              <div class="radio-card" data-name="feedback-ratio" data-val="positive" onclick="selectRadio(this)">
+                <div class="radio-card-label">&#128077; 긍정 중심</div>
+              </div>
+              <div class="radio-card selected" data-name="feedback-ratio" data-val="balanced" onclick="selectRadio(this)">
+                <div class="radio-card-label">&#9878;&#65039; 균형</div>
+              </div>
+              <div class="radio-card" data-name="feedback-ratio" data-val="improvement" onclick="selectRadio(this)">
+                <div class="radio-card-label">&#128170; 개선 중심</div>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <div class="field-label">수치 vs 해석</div>
+            <div class="radio-cards triple">
+              <div class="radio-card" data-name="data-style" data-val="numeric" onclick="selectRadio(this)">
+                <div class="radio-card-label">&#128290; 수치</div>
+              </div>
+              <div class="radio-card selected" data-name="data-style" data-val="balanced" onclick="selectRadio(this)">
+                <div class="radio-card-label">&#9878;&#65039; 균형</div>
+              </div>
+              <div class="radio-card" data-name="data-style" data-val="interpret" onclick="selectRadio(this)">
+                <div class="radio-card-label">&#128172; 해석</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon red">&#128202;</div>
+        <div><div class="card-title">KPI & 분석 설정</div><div class="card-desc">핵심 지표와 비교 기준을 선택해주세요</div></div>
+      </div>
+      <div class="card-body">
+        <div class="field">
+          <div class="field-label">핵심 KPI (여러 개 선택 가능)</div>
+          <div class="chips" data-name="kpi" data-multi="true">
+            <div class="chip selected" data-val="attendance" onclick="toggleChip(this)">&#128203; 출석률</div>
+            <div class="chip selected" data-val="avg-score" onclick="toggleChip(this)">&#128200; 평균 점수</div>
+            <div class="chip" data-val="completion" onclick="toggleChip(this)">&#9989; 학습 완성도</div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <div class="field-label">보고서 기간</div>
+            <select id="f-period">
+              <option value="weekly">주간</option>
+              <option value="monthly" selected>월간</option>
+              <option value="semester">학기별</option>
+              <option value="exam">중간/기말</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="field-label">비교 기준</div>
+            <select id="f-comparison">
+              <option value="previous" selected>이전 대비</option>
+              <option value="goal">목표 대비</option>
+              <option value="average">평균 대비</option>
+              <option value="mixed">복합</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="nav-buttons">
+      <button class="btn btn-secondary" onclick="prevStep()">&#8592; 이전</button>
+      <button class="btn btn-primary" onclick="nextStep()">다음 &#8594;</button>
+    </div>
+  </div>
+
+  <!-- ========== STEP 5: 레이아웃 & 추가 ========== -->
+  <div class="step" data-step="5">
+    <div class="card" style="margin-top:20px">
+      <div class="card-head">
+        <div class="card-icon green">&#128241;</div>
+        <div><div class="card-title">레이아웃 & 형식</div><div class="card-desc">보고서의 구조와 상세도를 정해주세요</div></div>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="field">
+            <div class="field-label">요약 정도</div>
+            <div class="radio-cards triple">
+              <div class="radio-card" data-name="summary-level" data-val="brief" onclick="selectRadio(this)">
+                <div class="radio-card-label">&#128064; 한눈에</div>
+              </div>
+              <div class="radio-card selected" data-name="summary-level" data-val="medium" onclick="selectRadio(this)">
+                <div class="radio-card-label">&#9878;&#65039; 중간</div>
+              </div>
+              <div class="radio-card" data-name="summary-level" data-val="detailed" onclick="selectRadio(this)">
+                <div class="radio-card-label">&#128269; 상세</div>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <div class="field-label">과목/단원 세분화</div>
+            <div class="radio-cards">
+              <div class="radio-card" data-name="subject-detail" data-val="detailed" onclick="selectRadio(this)">
+                <div class="radio-card-label">&#128209; 세세하게</div>
+              </div>
+              <div class="radio-card selected" data-name="subject-detail" data-val="brief" onclick="selectRadio(this)">
+                <div class="radio-card-label">&#128196; 간략하게</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <div class="field-label">수업 로그 포함</div>
+            <div class="radio-cards">
+              <div class="radio-card selected" data-name="include-log" data-val="yes" onclick="selectRadio(this)">
+                <div class="radio-card-label">&#9989; 예</div>
+              </div>
+              <div class="radio-card" data-name="include-log" data-val="no" onclick="selectRadio(this)">
+                <div class="radio-card-label">&#10060; 아니오</div>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <div class="field-label">모바일 스크롤 길이</div>
+            <div class="radio-cards triple">
+              <div class="radio-card" data-name="scroll-length" data-val="short" onclick="selectRadio(this)">
+                <div class="radio-card-label">&#128248; 짧게</div>
+              </div>
+              <div class="radio-card selected" data-name="scroll-length" data-val="medium" onclick="selectRadio(this)">
+                <div class="radio-card-label">&#9878;&#65039; 중간</div>
+              </div>
+              <div class="radio-card" data-name="scroll-length" data-val="long" onclick="selectRadio(this)">
+                <div class="radio-card-label">&#128220; 상세</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <div class="field-label">동적 요소</div>
+          <div class="radio-cards">
+            <div class="radio-card selected" data-name="dynamic" data-val="interactive" onclick="selectRadio(this)">
+              <div class="radio-card-icon">&#128073;</div>
+              <div class="radio-card-label">클릭/확장 포함</div>
+              <div class="radio-card-desc">탭 전환, 펼치기 등</div>
+            </div>
+            <div class="radio-card" data-name="dynamic" data-val="static" onclick="selectRadio(this)">
+              <div class="radio-card-icon">&#128247;</div>
+              <div class="radio-card-label">정적 화면</div>
+              <div class="radio-card-desc">스크롤만으로 확인</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon blue">&#128209;</div>
+        <div><div class="card-title">섹션 순서</div><div class="card-desc">보고서 섹션 순서를 드래그하여 변경할 수 있습니다</div></div>
+      </div>
+      <div class="card-body">
+        <div class="order-list" id="section-order">
+          <div class="order-item" data-section="summary"><span class="order-num">1</span> 요약<span class="order-grip">&#9776;</span></div>
+          <div class="order-item" data-section="attendance"><span class="order-num">2</span> 출석<span class="order-grip">&#9776;</span></div>
+          <div class="order-item" data-section="score"><span class="order-num">3</span> 성적<span class="order-grip">&#9776;</span></div>
+          <div class="order-item" data-section="learning"><span class="order-num">4</span> 학습현황<span class="order-grip">&#9776;</span></div>
+          <div class="order-item" data-section="comment"><span class="order-num">5</span> 코멘트<span class="order-grip">&#9776;</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-icon orange">&#128172;</div>
+        <div><div class="card-title">추가 요청사항</div><div class="card-desc">자유롭게 작성해주세요</div></div>
+      </div>
+      <div class="card-body">
+        <div class="field">
+          <textarea id="f-extra" placeholder="선생님의 수업 데이터는 선생님이 누구보다 가장 잘 알고 계세요.&#10;&#10;수업 데이터의 어떤 자료를 중심으로 어떤 결과물이 구성되면 좋을지 구체적으로 정리해주시면 더 좋은 결과물을 얻으실 수 있습니다.&#10;&#10;예: 매 수업 후 작성하는 수업일지의 '수업내용', '과제', '특이사항' 필드를 중심으로..."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav-buttons">
+      <button class="btn btn-secondary" onclick="prevStep()">&#8592; 이전</button>
+      <button class="btn btn-success btn-lg" id="btn-submit" onclick="submitForm()">&#128640; 신청서 제출</button>
+    </div>
+  </div>
+
+  <!-- ========== 완료 ========== -->
+  <div class="step" data-step="done">
+    <div class="success-card" style="margin-top:40px">
+      <div class="success-icon">&#127881;</div>
+      <div class="success-title">신청이 완료되었습니다!</div>
+      <div class="success-desc">
+        입력하신 내용을 바탕으로 맞춤형 보고서 시스템을 제작해드리겠습니다.<br><br>
+        <strong>진행 순서:</strong><br>
+        1. 접수 확인 연락 (1영업일 이내)<br>
+        2. Notion 데이터 연동 설정<br>
+        3. 샘플 보고서 제작 및 확인<br>
+        4. 최종 세팅 완료<br><br>
+        궁금한 점은 언제든 연락주세요.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentStep = 1;
+const TOTAL_STEPS = 5;
+
+// navigation
+function goTo(s) {
+  currentStep = s;
+  document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+  document.querySelector(`.step[data-step="${s}"]`).classList.add('active');
+  document.getElementById('progress-fill').style.width = (s === 'done' ? 100 : (s / TOTAL_STEPS) * 100) + '%';
+  document.querySelectorAll('.progress-step').forEach(el => {
+    const n = parseInt(el.dataset.s);
+    el.classList.toggle('active', n === s);
+    el.classList.toggle('done', n < s);
+  });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function nextStep() {
+  if (currentStep === 1) {
+    if (!val('f-academy') || !val('f-teacher') || !val('f-phone') || !val('f-sample-student')) {
+      showAlert('필수 항목을 모두 입력해주세요.'); return;
+    }
+  }
+  clearAlerts();
+  if (currentStep < TOTAL_STEPS) goTo(currentStep + 1);
+}
+function prevStep() { if (currentStep > 1) goTo(currentStep - 1); }
+
+// form helpers
+function val(id) { return document.getElementById(id)?.value?.trim() || ''; }
+
+function selectChip(el) {
+  el.parentElement.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+function toggleChip(el) { el.classList.toggle('selected'); }
+
+function selectRadio(el) {
+  const name = el.dataset.name;
+  document.querySelectorAll(`.radio-card[data-name="${name}"]`).forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function syncColor(type) {
+  const txt = document.getElementById(`f-${type}-color-text`);
+  const picker = document.getElementById(`f-${type}-color`);
+  if (txt.value.match(/^#[0-9a-fA-F]{6}$/)) picker.value = txt.value;
+}
+// reverse sync
+document.querySelectorAll('input[type=color]').forEach(el => {
+  el.addEventListener('input', function() {
+    const id = this.id.replace('-color', '-color-text');
+    const txt = document.getElementById(id);
+    if (txt) txt.value = this.value;
+  });
+});
+
+function getChipValues(name) {
+  const chips = document.querySelector(`.chips[data-name="${name}"]`);
+  if (!chips) return [];
+  return [...chips.querySelectorAll('.chip.selected')].map(c => c.dataset.val);
+}
+function getRadioValue(name) {
+  const sel = document.querySelector(`.radio-card.selected[data-name="${name}"]`);
+  return sel ? sel.dataset.val : '';
+}
+function getSectionOrder() {
+  return [...document.querySelectorAll('#section-order .order-item')].map(el => el.dataset.section);
+}
+
+// alerts
+function clearAlerts() { document.getElementById('alert-area').innerHTML = ''; }
+function showAlert(msg) {
+  document.getElementById('alert-area').innerHTML = `<div class="alert alert-error"><span>&#10060;</span><div>${msg}</div></div>`;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// collect
+function collectData() {
+  return {
+    basic: {
+      academy: val('f-academy'),
+      teacher: val('f-teacher'),
+      phone: val('f-phone'),
+      sampleStudent: val('f-sample-student')
+    },
+    design: {
+      mainColor: val('f-main-color-text') || document.getElementById('f-main-color').value,
+      subColor: val('f-sub-color-text') || document.getElementById('f-sub-color').value,
+      warnColor: getChipValues('warn-color')[0] || 'red',
+      positiveColor: getChipValues('positive-color')[0] || 'blue',
+      bgTone: getRadioValue('bg-tone') || 'light'
+    },
+    visualization: {
+      chartTypes: getChipValues('chart-types'),
+      graphTone: getRadioValue('graph-tone') || 'simple'
+    },
+    writing: {
+      style: getRadioValue('writing-style') || 'friendly',
+      target: val('f-target') || 'parent',
+      honorific: val('f-honorific') || 'polite'
+    },
+    content: {
+      firstScreen: getChipValues('first-screen'),
+      feedbackRatio: getRadioValue('feedback-ratio') || 'balanced',
+      dataStyle: getRadioValue('data-style') || 'balanced'
+    },
+    kpi: {
+      metrics: getChipValues('kpi'),
+      period: val('f-period') || 'monthly',
+      comparison: val('f-comparison') || 'previous'
+    },
+    layout: {
+      summaryLevel: getRadioValue('summary-level') || 'medium',
+      subjectDetail: getRadioValue('subject-detail') || 'brief',
+      includeLog: getRadioValue('include-log') || 'yes',
+      scrollLength: getRadioValue('scroll-length') || 'medium',
+      dynamic: getRadioValue('dynamic') || 'interactive',
+      sectionOrder: getSectionOrder()
+    },
+    extra: val('f-extra'),
+    submittedAt: new Date().toISOString()
+  };
+}
+
+// submit
+async function submitForm() {
+  clearAlerts();
+  const data = collectData();
+  if (!data.basic.academy || !data.basic.teacher || !data.basic.phone || !data.basic.sampleStudent) {
+    showAlert('기본 정보를 모두 입력해주세요.');
+    goTo(1); return;
+  }
+
+  const btn = document.getElementById('btn-submit');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 제출 중...';
+
+  try {
+    // localStorage에 저장
+    const DB_KEY = 'wfgen_submissions';
+    const all = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const safeName = (data.basic?.academy || 'unknown').replace(/[^a-zA-Z0-9가-힣_-]/g, '_');
+    const fileName = `${safeName}_${ts}.json`;
+    data._meta = {
+      fileName,
+      status: 'pending',
+      submittedAt: data.submittedAt || new Date().toISOString(),
+      notionConfigured: false,
+      workflowGenerated: false
+    };
+    all.push(data);
+    localStorage.setItem(DB_KEY, JSON.stringify(all));
+    goTo('done');
+  } catch (e) {
+    showAlert('저장에 실패했습니다: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '&#128640; 신청서 제출';
+  }
+}
+
+// drag & drop for section order (desktop + mobile touch)
+(function initDragDrop() {
+  let dragEl = null;
+  const list = document.getElementById('section-order');
+
+  function updateOrderNums() {
+    document.querySelectorAll('#section-order .order-item').forEach((el, i) => {
+      el.querySelector('.order-num').textContent = i + 1;
+    });
+  }
+
+  function moveItem(clientY) {
+    const items = [...list.querySelectorAll('.order-item')];
+    for (const item of items) {
+      if (item === dragEl) continue;
+      const rect = item.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      if (clientY < mid) { list.insertBefore(dragEl, item); return; }
+    }
+    list.appendChild(dragEl);
+  }
+
+  // desktop drag
+  list.addEventListener('dragstart', e => { dragEl = e.target.closest('.order-item'); if (dragEl) dragEl.style.opacity = '.5'; });
+  list.addEventListener('dragend', () => { if (dragEl) dragEl.style.opacity = '1'; dragEl = null; updateOrderNums(); });
+  list.addEventListener('dragover', e => { e.preventDefault(); if (dragEl) moveItem(e.clientY); });
+  document.querySelectorAll('.order-item').forEach(el => el.draggable = true);
+
+  // mobile touch
+  list.addEventListener('touchstart', e => {
+    const item = e.target.closest('.order-item');
+    if (!item) return;
+    dragEl = item;
+    dragEl.style.opacity = '.5';
+    dragEl.style.zIndex = '100';
+  }, { passive: true });
+
+  list.addEventListener('touchmove', e => {
+    if (!dragEl) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    moveItem(touch.clientY);
+  }, { passive: false });
+
+  list.addEventListener('touchend', () => {
+    if (dragEl) {
+      dragEl.style.opacity = '1';
+      dragEl.style.zIndex = '';
+      dragEl = null;
+      updateOrderNums();
+    }
+  });
+})();
+</script>
+</body>
+</html>
