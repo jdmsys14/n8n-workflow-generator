@@ -53,6 +53,7 @@
       githubBody:   uuid(),
       githubUpload: uuid(),
       done:         uuid(),
+      pageIdCheck:  uuid(),
       notionUpdate: uuid(),
     };
 
@@ -121,6 +122,7 @@ return { json: {
       const ct = prop.classLog.content;
       const hw = prop.classLog.homework;
       const nt = prop.classLog.note;
+      const st = prop.classLog.status || ['✅상태', '상태'];
 
       function makeGetValChain(fields) {
         return fields.map(f => `getVal(props[${JSON.stringify(f)}])`).join(' || ');
@@ -147,6 +149,16 @@ function getVal(prop) {
       if (f.type === 'string') return f.string || '';
       if (typeof f.string !== 'undefined') return f.string || '';
       if (f.type === 'date')   return f.date?.start || '';
+      return '';
+    }
+    case 'rollup': {
+      const arr = prop.rollup?.array;
+      if (!arr || arr.length === 0) return '';
+      const first = arr[0];
+      if (first.type === 'select' && first.select) return first.select.name || '';
+      if (first.type === 'formula' && first.formula) {
+        if (first.formula.type === 'string') return first.formula.string || '';
+      }
       return '';
     }
     default: return '';
@@ -205,9 +217,10 @@ for (const page of pages) {
     };
   }
 
+  const status = ${st.map(f => `getVal(props[${JSON.stringify(f)}])`).join(' || ')} || '';
   grouped[matchedName].logs.push({
     date:     findDate(props, page.created_time),
-    course:   ${makeGetValChain(co)},
+    course:   status === '결석' ? '결석' : (${makeGetValChain(co)}),
     textbook: ${makeGetValChain(tb)},
     content:  ${makeGetValChain(ct)},
     homework: ${makeGetValChain(hw)},
@@ -1073,6 +1086,24 @@ return { json: {
       },
       {
         parameters: {
+          conditions: {
+            options: { caseSensitive: true, leftValue: '', typeValidation: 'strict' },
+            conditions: [
+              {
+                id: 'page-id-check',
+                leftValue: '={{ $json.page_id }}',
+                rightValue: '',
+                operator: { type: 'string', operation: 'notEmpty' }
+              }
+            ],
+            combinator: 'and'
+          },
+          options: {}
+        },
+        type: 'n8n-nodes-base.if', typeVersion: 2.2, position: [2460, 920], id: ids.pageIdCheck, name: 'page_id 확인'
+      },
+      {
+        parameters: {
           resource: 'databasePage', operation: 'update',
           pageId: { __rl: true, mode: 'id', value: '={{ $json.page_id }}' },
           propertiesUi: { propertyValues: [
@@ -1082,7 +1113,7 @@ return { json: {
           ] },
           options: {}
         },
-        type: 'n8n-nodes-base.notion', typeVersion: 2.2, position: [2460, 1000], id: ids.notionUpdate, name: 'Notion 업데이트',
+        type: 'n8n-nodes-base.notion', typeVersion: 2.2, position: [2680, 840], id: ids.notionUpdate, name: 'Notion 업데이트',
         credentials: { notionApi: { id: credentials.notion.id, name: credentials.notion.name } }
       }
     ];
@@ -1101,7 +1132,11 @@ return { json: {
       'GitHub 파일 확인': { main: [[{ node: 'GitHub Body 생성', type: 'main', index: 0 }]] },
       'GitHub Body 생성': { main: [[{ node: 'GitHub 업로드', type: 'main', index: 0 }]] },
       'GitHub 업로드':   { main: [[{ node: '완료', type: 'main', index: 0 }]] },
-      '완료':           { main: [[{ node: 'Notion 업데이트', type: 'main', index: 0 }]] },
+      '완료':           { main: [[{ node: 'page_id 확인', type: 'main', index: 0 }]] },
+      'page_id 확인':   { main: [
+        [{ node: 'Notion 업데이트', type: 'main', index: 0 }],
+        [{ node: 'Loop Over Items', type: 'main', index: 0 }]
+      ] },
       'Notion 업데이트': { main: [[{ node: 'Loop Over Items', type: 'main', index: 0 }]] }
     };
 

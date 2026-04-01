@@ -320,6 +320,7 @@ textarea{resize:vertical;min-height:80px}
                 <tr><td>수업내용</td><td><input type="text" id="p-cl-content" value="수업내용, 수업 내용, 내용"></td></tr>
                 <tr><td>과제</td><td><input type="text" id="p-cl-homework" value="과제, 숙제"></td></tr>
                 <tr><td>특이사항</td><td><input type="text" id="p-cl-note" value="특이사항, 개선 사항"></td></tr>
+                <tr><td>상태(결석판별)</td><td><input type="text" id="p-cl-status" value="✅상태, 상태"></td></tr>
               </table>
             </div>
           </div>
@@ -591,6 +592,7 @@ function renderDetail() {
       setVal('p-cl-content', p.content);
       setVal('p-cl-homework', p.homework);
       setVal('p-cl-note', p.note);
+      if (p.status) setVal('p-cl-status', p.status);
     }
   }
 
@@ -648,6 +650,7 @@ async function saveNotionConfig() {
       content: val('p-cl-content'),
       homework: val('p-cl-homework'),
       note: val('p-cl-note'),
+      status: val('p-cl-status'),
     }
   };
 
@@ -704,7 +707,8 @@ async function generateWorkflow() {
         textbook: split(nc.properties?.textbook),
         content: split(nc.properties?.content),
         homework: split(nc.properties?.homework),
-        note: split(nc.properties?.note)
+        note: split(nc.properties?.note),
+        status: split(nc.properties?.status)
       }
     },
     design: {
@@ -1075,7 +1079,8 @@ async function confirmAndRegenerate() {
         textbook: split(nc.properties?.textbook),
         content: split(nc.properties?.content),
         homework: split(nc.properties?.homework),
-        note: split(nc.properties?.note)
+        note: split(nc.properties?.note),
+        status: split(nc.properties?.status)
       }
     };
     mergedConfig.report = { sections: { examResults:true, donut:true, ability:true, roadmap:true, schedule:true, notices:true, attention:true } };
