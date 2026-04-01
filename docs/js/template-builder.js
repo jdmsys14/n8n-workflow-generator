@@ -249,19 +249,37 @@ function getVal(prop) {
   }
 }
 
+// 날짜 패턴 (이름이 아님)
+function looksLikeDate(s) {
+  if (!s) return false;
+  return /^\\d{4}-\\d{2}-\\d{2}/.test(s) || /^\\d{4}년/.test(s) || /^\\d{2}\\.\\d{2}/.test(s);
+}
+
 function findName(props) {
   // 1) 지정된 필드에서 추출
   const v = getVal(props[${JSON.stringify(nameFieldName)}]);
-  if (v) return v.trim();
-  // 2) title 타입 fallback
-  for (const val of Object.values(props)) {
-    if (val.type === 'title' && val.title?.[0]?.plain_text) return val.title[0].plain_text.trim();
+  if (v && !looksLikeDate(v)) return v.trim();
+
+  // 2) 'F이름', '이름' 등 이름 관련 필드 우선 탐색 (formula 우선)
+  const nameKeys = Object.entries(props)
+    .filter(([k]) => k.includes('이름') || k.includes('name') || k.includes('Name'))
+    .sort((a, b) => {
+      // formula > rich_text > title > 나머지 순으로 우선
+      const order = { formula: 0, rich_text: 1, title: 2 };
+      const oa = order[a[1].type] !== undefined ? order[a[1].type] : 9;
+      const ob = order[b[1].type] !== undefined ? order[b[1].type] : 9;
+      return oa - ob;
+    });
+  for (const [key, val] of nameKeys) {
+    const r = getVal(val);
+    if (r && !looksLikeDate(r)) return r.trim();
   }
-  // 3) '이름' 키워드가 포함된 필드 시도
-  for (const [key, val] of Object.entries(props)) {
-    if (key.includes('이름') || key.includes('name')) {
-      const r = getVal(val);
-      if (r) return r.trim();
+
+  // 3) title 타입 fallback (날짜 아닌 것만)
+  for (const val of Object.values(props)) {
+    if (val.type === 'title' && val.title?.[0]?.plain_text) {
+      const t = val.title[0].plain_text.trim();
+      if (t && !looksLikeDate(t)) return t;
     }
   }
   return '';
@@ -415,10 +433,33 @@ function getVal(prop) {
 ${fieldHelpers}
 ${statusHelper}
 
+function looksLikeDate(s) {
+  if (!s) return false;
+  return /^\\d{4}-\\d{2}-\\d{2}/.test(s) || /^\\d{4}년/.test(s) || /^\\d{2}\\.\\d{2}/.test(s);
+}
+
 function findName(props) {
-  ${sn.map(f => `{ const v = getVal(props[${JSON.stringify(f)}]); if (v) return v; }`).join('\n  ')}
+  // 1) 지정된 필드에서 추출
+  ${sn.map(f => `{ const v = getVal(props[${JSON.stringify(f)}]); if (v && !looksLikeDate(v)) return v.trim(); }`).join('\n  ')}
+  // 2) 이름 관련 필드 탐색 (formula 우선)
+  const nameKeys = Object.entries(props)
+    .filter(([k]) => k.includes('이름') || k.includes('name'))
+    .sort((a, b) => {
+      const order = { formula: 0, rich_text: 1, title: 2 };
+      const oa = order[a[1].type] !== undefined ? order[a[1].type] : 9;
+      const ob = order[b[1].type] !== undefined ? order[b[1].type] : 9;
+      return oa - ob;
+    });
+  for (const [key, val] of nameKeys) {
+    const r = getVal(val);
+    if (r && !looksLikeDate(r)) return r.trim();
+  }
+  // 3) title fallback
   for (const val of Object.values(props)) {
-    if (val.type === 'title' && val.title?.[0]?.plain_text) return val.title[0].plain_text;
+    if (val.type === 'title' && val.title?.[0]?.plain_text) {
+      const t = val.title[0].plain_text.trim();
+      if (t && !looksLikeDate(t)) return t;
+    }
   }
   return '';
 }
