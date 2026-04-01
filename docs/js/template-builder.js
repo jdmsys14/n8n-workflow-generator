@@ -38,6 +38,11 @@
     const github = shared.github || config.github || {};
     const prop = properties;
 
+    // 동적 필드 모드 감지
+    const dynamicFields = prop.classLog?.fields || null;
+    // dynamicFields가 있으면: [{name, type, role}] 형태
+    // role: 'studentName' | 'date' | 'data'
+
     const ids = {
       trigger:      uuid(),
       dateCalc:     uuid(),
@@ -115,6 +120,155 @@ return { json: {
     }
 
     function buildGroupMatchCode() {
+      // 동적 필드 모드
+      if (dynamicFields) {
+        const nameField = dynamicFields.find(f => f.role === 'studentName');
+        const dateField = dynamicFields.find(f => f.role === 'date');
+        const dataFields = dynamicFields.filter(f => f.role === 'data');
+
+        const nameFieldName = nameField?.name || '이름';
+        const dateFieldName = dateField?.name || '날짜';
+
+        // 데이터 필드에서 로그 객체 속성 생성 코드
+        const logFieldsCode = dataFields.map(f =>
+          `    ${JSON.stringify(f.name)}: getVal(props[${JSON.stringify(f.name)}])`
+        ).join(',\n');
+
+        return `// 이름 매칭 & 학생별 수업일지 그룹화 (동적 필드)
+const sd    = $('학생 이름 추출').first().json;
+const input = $input.first().json;
+const pages = input.results || [];
+
+const { studentNames = [], studentMap = {}, reportPeriod = '', classPeriod = '',
+        lastMonthStart = '', lastMonthEnd = '' } = sd;
+
+function getVal(prop) {
+  if (!prop) return '';
+  switch (prop.type) {
+    case 'title':     return prop.title?.[0]?.plain_text     || '';
+    case 'rich_text': return prop.rich_text?.[0]?.plain_text || '';
+    case 'select':    return prop.select?.name               || '';
+    case 'multi_select': return (prop.multi_select || []).map(s => s.name).join(', ') || '';
+    case 'date':      return prop.date?.start                || '';
+    case 'number':    return prop.number != null ? String(prop.number) : '';
+    case 'checkbox':  return prop.checkbox ? '✅' : '';
+    case 'status':    return prop.status?.name || '';
+    case 'url':       return prop.url || '';
+    case 'email':     return prop.email || '';
+    case 'phone_number': return prop.phone_number || '';
+    case 'created_time': return (prop.created_time || '').split('T')[0];
+    case 'formula': {
+      const f = prop.formula;
+      if (!f) return '';
+      if (f.type === 'string') return f.string || '';
+      if (typeof f.string !== 'undefined') return f.string || '';
+      if (f.type === 'number') return f.number != null ? String(f.number) : '';
+      if (f.type === 'date')   return f.date?.start || '';
+      if (f.type === 'boolean') return f.boolean ? '✅' : '';
+      return '';
+    }
+    case 'rollup': {
+      const arr = prop.rollup?.array;
+      if (!arr || arr.length === 0) return '';
+      const first = arr[0];
+      if (first.type === 'select' && first.select) return first.select.name || '';
+      if (first.type === 'formula' && first.formula) {
+        if (first.formula.type === 'string') return first.formula.string || '';
+      }
+      return '';
+    }
+    case 'relation': return (prop.relation || []).map(r => r.id).join(', ') || '';
+    default: return '';
+  }
+}
+
+function findName(props) {
+  const v = getVal(props[${JSON.stringify(nameFieldName)}]);
+  if (v) return v;
+  for (const val of Object.values(props)) {
+    if (val.type === 'title' && val.title?.[0]?.plain_text) return val.title[0].plain_text;
+  }
+  return '';
+}
+
+function findDate(props, createdTime) {
+  const p = props[${JSON.stringify(dateFieldName)}];
+  if (p?.date?.start) return p.date.start;
+  if (p?.created_time) return p.created_time.split('T')[0];
+  const v = getVal(p);
+  if (v && v.match(/\\d{4}-\\d{2}-\\d{2}/)) return v;
+  return (createdTime || '').split('T')[0];
+}
+
+function inRange(dateStr) {
+  if (!dateStr || !lastMonthStart || !lastMonthEnd) return true;
+  return dateStr >= lastMonthStart && dateStr <= lastMonthEnd;
+}
+
+function matchStudent(rawName, studentNames) {
+  const names = rawName.split(/[,，、]/).map(n => n.trim()).filter(Boolean);
+  for (const n of names) {
+    const found = studentNames.find(s => s === n || n.includes(s) || s.includes(n));
+    if (found) return found;
+  }
+  return null;
+}
+
+const grouped = {};
+let matched = 0, outOfRange = 0, unmatched = 0;
+const allNames = new Set();
+
+for (const page of pages) {
+  const props   = page.properties || {};
+  const rawName = findName(props);
+  if (rawName) allNames.add(rawName);
+
+  const matchedName = rawName ? matchStudent(rawName, studentNames) : null;
+  if (!matchedName) { unmatched++; continue; }
+
+  const logDate = findDate(props, page.created_time);
+  if (!inRange(logDate)) { outOfRange++; continue; }
+
+  matched++;
+  if (!grouped[matchedName]) {
+    grouped[matchedName] = {
+      student_name: matchedName,
+      reportPeriod, classPeriod,
+      page_id: studentMap[matchedName]?.portfolio_page_id || '',
+      logs: [],
+      fieldNames: ${JSON.stringify(dataFields.map(f => f.name))}
+    };
+  }
+
+  grouped[matchedName].logs.push({
+    date: findDate(props, page.created_time),
+${logFieldsCode}
+  });
+}
+
+console.log(\`매칭 \${matched} / 기간외 \${outOfRange} / 미매칭 \${unmatched}\`);
+
+const students = Object.values(grouped).map(s => {
+  s.logs.sort((a,b) => new Date(a.date)-new Date(b.date));
+  return { json: s };
+});
+
+if (students.length === 0) {
+  return [{ json: {
+    _debug: true,
+    student_name: '(매칭없음)',
+    reportPeriod, classPeriod, page_id: '', logs: [], fieldNames: [],
+    debug_info: {
+      total_pages: pages.length,
+      studentNames,
+      all_names_in_db: [...allNames].sort()
+    }
+  }}];
+}
+return students;`;
+      }
+
+      // 레거시 모드 (기존 고정 필드)
       const sn = prop.classLog.studentName;
       const dt = prop.classLog.date;
       const co = prop.classLog.course;
@@ -304,23 +458,53 @@ return students;`;
     { "day": "월요일", "time": "17:00 등원" }
   ]` : '';
 
-      return `// API Body 생성
+      // 동적 필드용 로그 텍스트 생성 코드
+      let logsTextCode, absentCode, courseSetCode;
 
-const s = $input.item.json;
-const classPeriod  = s.classPeriod  || '';
-const reportPeriod = s.reportPeriod || '';
-const logs = s.logs || [];
+      if (dynamicFields) {
+        const dataFields = dynamicFields.filter(f => f.role === 'data');
+        const fieldListStr = dataFields.map(f => JSON.stringify(f.name)).join(', ');
 
+        logsTextCode = `const fieldNames = s.fieldNames || [${fieldListStr}];
 const logsText = logs.length > 0
+  ? logs.map((l, i) => {
+      const parts = [\`[\${i+1}] 날짜:\${l.date||'미정'}\`];
+      for (const fn of fieldNames) {
+        if (l[fn] !== undefined && l[fn] !== '') parts.push(\`\${fn}:\${l[fn]}\`);
+      }
+      return parts.join(' | ');
+    }).join('\\n')
+  : '수업 기록 없음';`;
+
+        absentCode = `// 결석 판별: 모든 필드에서 '결석' 키워드 탐색
+const absentLogs = logs.filter(l => {
+  const allText = Object.values(l).join(' ');
+  return allText.includes('결석');
+});
+const actualLessons = logs.filter(l => {
+  const allText = Object.values(l).join(' ');
+  return !allText.includes('결석');
+});`;
+
+        courseSetCode = `// 과정 분석: 첫 번째 데이터 필드를 과정으로 사용
+const firstField = fieldNames[0] || '';
+const courseSet = {};
+actualLessons.forEach(l => {
+  const course = l[firstField] || '기타';
+  if (!courseSet[course]) courseSet[course] = { count: 0 };
+  courseSet[course].count++;
+});`;
+      } else {
+        logsTextCode = `const logsText = logs.length > 0
   ? logs.map((l, i) =>
       \`[\${i+1}] 날짜:\${l.date||'미정'} | 과정:\${l.course||'-'} | 교재:\${l.textbook||'-'} | 수업내용:\${l.content||'-'} | 과제:\${l.homework||'-'} | 특이사항:\${l.note||'-'}\`
     ).join('\\n')
-  : '수업 기록 없음';
+  : '수업 기록 없음';`;
 
-const absentLogs    = logs.filter(l => l.course && l.course.includes('결석'));
-const actualLessons = logs.filter(l => !l.course?.includes('결석'));
+        absentCode = `const absentLogs    = logs.filter(l => l.course && l.course.includes('결석'));
+const actualLessons = logs.filter(l => !l.course?.includes('결석'));`;
 
-const courseSet = {};
+        courseSetCode = `const courseSet = {};
 actualLessons.forEach(l => {
   if (l.course) {
     if (!courseSet[l.course]) courseSet[l.course] = { textbooks: new Set(), count: 0 };
@@ -330,27 +514,45 @@ actualLessons.forEach(l => {
         .forEach(t => courseSet[l.course].textbooks.add(t));
     }
   }
-});
+});`;
+      }
+
+      return `// API Body 생성
+
+const s = $input.item.json;
+const classPeriod  = s.classPeriod  || '';
+const reportPeriod = s.reportPeriod || '';
+const logs = s.logs || [];
+
+${logsTextCode}
+
+${absentCode}
+
+${courseSetCode}
 
 const courseSummaryText = Object.entries(courseSet)
-  .map(([c, v]) => \`\${c}(\${v.count}회, 교재: \${[...v.textbooks].join('/')})\`)
+  .map(([c, v]) => v.textbooks ? \`\${c}(\${v.count}회, 교재: \${[...v.textbooks].join('/')})\` : \`\${c}(\${v.count}회)\`)
   .join(', ');
 
 const ILLNESS_KW = ['수술','입원','병원','몸살','감기','발열','아파','코로나','격리','질병','건강','병결'];
 const illnessLogs = logs.filter(l => {
-  const fields = [l.note, l.content, l.course].join(' ');
+  const fields = Object.values(l).join(' ');
   return ILLNESS_KW.some(kw => fields.includes(kw));
 });
 const hasIllnessAbsent = illnessLogs.length > 0;
 
 const examLogs = logs.filter(l => {
-  const fields = [l.content, l.note, l.course, l.textbook].join(' ');
+  const fields = Object.values(l).join(' ');
   return fields.includes('모의고사') || fields.includes('등급') || fields.includes('모고');
 });
 const examText = examLogs.length > 0
-  ? examLogs.map(l =>
-      \`날짜:\${l.date||'미정'} | 수업내용:\${l.content||'-'} | 특이사항:\${l.note||'-'}\`
-    ).join('\\n')
+  ? examLogs.map(l => {
+      const parts = [\`날짜:\${l.date||'미정'}\`];
+      for (const [k, v] of Object.entries(l)) {
+        if (k !== 'date' && v) parts.push(\`\${k}:\${v}\`);
+      }
+      return parts.join(' | ');
+    }).join('\\n')
   : '없음';
 
 const apiBody = {
