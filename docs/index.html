@@ -515,8 +515,8 @@ textarea{resize:vertical;min-height:80px}
                 </div>
               </div>
               <div class="field">
-                <div class="field-label"><span class="req">*</span> Claude API Key</div>
-                <input type="text" id="fix-api-key" placeholder="sk-ant-xxxxx">
+                <div class="field-label">Claude API Key <span style="font-size:10px;color:var(--text3)">(한 번 입력하면 자동 저장됩니다)</span></div>
+                <input type="text" id="fix-api-key" placeholder="sk-ant-xxxxx" onchange="localStorage.setItem('wfgen_claude_key',this.value)">
               </div>
               <div style="margin-top:16px">
                 <button class="btn btn-success btn-lg" id="btn-fix-workflow" onclick="fixWorkflow()" style="width:100%">&#128295; 코드 수정 요청</button>
@@ -1573,7 +1573,7 @@ function retryFix() {
 async function fixWorkflow() {
   const jsonStr = document.getElementById('fix-wf-json').value.trim();
   const errorText = document.getElementById('fix-error-text').value.trim();
-  const apiKey = document.getElementById('fix-api-key').value.trim() || val('n-api-key');
+  const apiKey = document.getElementById('fix-api-key').value.trim() || localStorage.getItem('wfgen_claude_key') || val('n-api-key');
 
   if (!jsonStr) { showAlert('error', '워크플로우 JSON을 입력해주세요.'); return; }
   if (!errorText && !errorImageBase64) { showAlert('error', '에러 메시지 또는 스크린샷을 입력해주세요.'); return; }
@@ -1794,6 +1794,9 @@ function copyFixedJson() {
 // ── 초기화 ──
 loadSubmissions();
 renderFixHistory();
+// 저장된 Claude API Key 자동 로드
+const savedKey = localStorage.getItem('wfgen_claude_key');
+if (savedKey) document.getElementById('fix-api-key').value = savedKey;
 </script>
 </body>
 </html>
