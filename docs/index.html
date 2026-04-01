@@ -1508,19 +1508,90 @@ async function fixWorkflow() {
   document.getElementById('fix-result').style.display = 'none';
 
   try {
-    const resp = await fetch(`${API_BASE}/api/fix-workflow`, {
+    // 워크플로우에서 Code 노드 코드 추출
+    const nodeNames = (workflow.nodes || []).map(n => n.name);
+    const codeNodes = (workflow.nodes || []).filter(n => n.type === 'n8n-nodes-base.code');
+    const codeNodeSummary = codeNodes.map(cn =>
+      `--- [${cn.name}] ---\n${cn.parameters?.jsCode || cn.parameters?.code || '(코드 없음)'}`
+    ).join('\n\n');
+    const nodeList = nodeNames.map((n, i) => `  ${i+1}. ${n}`).join('\n');
+    const workflowStr = JSON.stringify(workflow, null, 2);
+
+    // Claude API 메시지 구성
+    const content = [];
+
+    // 이미지가 있으면 먼저
+    if (errorImageBase64) {
+      const m = errorImageBase64.match(/^data:image\/([^;]+);base64,(.+)$/);
+      if (m) {
+        content.push({ type: 'image', source: { type: 'base64', media_type: `image/${m[1]}`, data: m[2] } });
+      }
+    }
+
+    content.push({ type: 'text', text: `당신은 n8n 워크플로우 JSON 디버깅 및 수정 전문가입니다.
+
+## 에러 정보
+${errorText || '(위 스크린샷 참고)'}
+
+## 워크플로우 노드 목록
+${nodeList}
+
+## Code 노드 상세 (JavaScript)
+${codeNodeSummary || '(Code 노드 없음)'}
+
+## 전체 워크플로우 JSON
+${workflowStr}
+
+## 수정 지침
+1. 에러 메시지를 정확히 분석하세요.
+   - "Unexpected token '||'" → n8n Code 노드에서 || 연산자 문제. 삼항연산자나 if문으로 대체
+   - "Cannot read property" → optional chaining(?.) 사용
+   - "SyntaxError" → 문법 오류 수정
+2. n8n Code 노드는 ES2020 기준. 일부 구문 미지원 가능
+3. 에러 노드의 코드만 수정. 나머지 절대 변경 금지
+4. connections, credentials, meta 구조 유지
+
+## 출력 형식 (순수 JSON만, 마크다운 코드블록 금지)
+{
+  "fixedWorkflow": {전체 워크플로우 JSON},
+  "changes": [{"node": "노드명", "description": "수정 내용 (한국어)"}]
+}` });
+
+    // Claude API 직접 호출
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
       body: JSON.stringify({
-        workflow,
-        errorText,
-        errorImage: errorImageBase64 || null,
-        apiKey,
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 16000,
+        messages: [{ role: 'user', content }],
       }),
     });
 
-    const data = await resp.json();
-    if (!data.success) throw new Error(data.error || '수정 실패');
+    const apiData = await resp.json();
+    if (apiData.error) throw new Error(`Claude API: ${apiData.error.message || JSON.stringify(apiData.error)}`);
+
+    let raw = (apiData.content || []).find(b => b.type === 'text')?.text || '{}';
+    raw = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+
+    let result;
+    try { result = JSON.parse(raw); }
+    catch(e2) {
+      const m2 = raw.match(/\{[\s\S]*\}/);
+      result = m2 ? JSON.parse(m2[0]) : {};
+    }
+
+    const data = {
+      success: true,
+      fixedWorkflow: result.fixedWorkflow || result,
+      changes: result.changes || [],
+      usage: apiData.usage,
+    };
 
     fixedWorkflow = data.fixedWorkflow;
 
