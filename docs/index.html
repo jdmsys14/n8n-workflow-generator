@@ -1528,7 +1528,7 @@ async function fixWorkflow() {
       }
     }
 
-    content.push({ type: 'text', text: `당신은 n8n 워크플로우 JSON 디버깅 및 수정 전문가입니다.
+    content.push({ type: 'text', text: `당신은 n8n 워크플로우 JSON 디버깅 전문가입니다.
 
 ## 에러 정보
 ${errorText || '(위 스크린샷 참고)'}
@@ -1536,25 +1536,29 @@ ${errorText || '(위 스크린샷 참고)'}
 ## 워크플로우 노드 목록
 ${nodeList}
 
-## Code 노드 상세 (JavaScript)
+## Code 노드 상세 (에러가 발생하는 JavaScript 코드)
 ${codeNodeSummary || '(Code 노드 없음)'}
 
-## 전체 워크플로우 JSON
-${workflowStr}
-
 ## 수정 지침
-1. 에러 메시지를 정확히 분석하세요.
-   - "Unexpected token '||'" → n8n Code 노드에서 || 연산자 문제. 삼항연산자나 if문으로 대체
+1. 에러 메시지를 분석하고, 문제가 있는 Code 노드를 찾으세요.
+2. 해당 노드의 **수정된 전체 JavaScript 코드**를 출력하세요.
+3. 주요 에러 패턴:
+   - "Unexpected token '||'" → || 연산자를 삼항연산자 (a ? a : b) 또는 if문으로 대체
    - "Cannot read property" → optional chaining(?.) 사용
-   - "SyntaxError" → 문법 오류 수정
-2. n8n Code 노드는 ES2020 기준. 일부 구문 미지원 가능
-3. 에러 노드의 코드만 수정. 나머지 절대 변경 금지
-4. connections, credentials, meta 구조 유지
+   - "is not a function" → 함수 존재 확인
+4. n8n Code 노드 주의사항:
+   - 템플릿 리터럴 내의 \${} 표현식에서 || 사용 시 문제 발생 가능
+   - 복잡한 표현식은 변수로 먼저 할당 후 사용
 
-## 출력 형식 (순수 JSON만, 마크다운 코드블록 금지)
+## 출력 형식 (순수 JSON만 출력. 마크다운 코드블록 절대 금지. { 로 시작 } 로 끝)
 {
-  "fixedWorkflow": {전체 워크플로우 JSON},
-  "changes": [{"node": "노드명", "description": "수정 내용 (한국어)"}]
+  "fixes": [
+    {
+      "nodeName": "에러 발생 노드의 정확한 이름",
+      "fixedCode": "수정된 전체 JavaScript 코드 (이 코드가 jsCode 필드를 대체함)",
+      "description": "수정 내용 설명 (한국어)"
+    }
+  ]
 }` });
 
     // Claude API 직접 호출
@@ -1583,17 +1587,29 @@ ${workflowStr}
     try { result = JSON.parse(raw); }
     catch(e2) {
       const m2 = raw.match(/\{[\s\S]*\}/);
-      result = m2 ? JSON.parse(m2[0]) : {};
+      if (m2) { try { result = JSON.parse(m2[0]); } catch(e3) { throw new Error('AI 응답 파싱 실패. 다시 시도해주세요.'); } }
+      else { throw new Error('AI 응답 파싱 실패. 다시 시도해주세요.\n응답: ' + raw.slice(0, 200)); }
     }
 
-    const data = {
-      success: true,
-      fixedWorkflow: result.fixedWorkflow || result,
-      changes: result.changes || [],
-      usage: apiData.usage,
-    };
+    // 원본 워크플로우 복사 후 수정된 코드 적용
+    const fixed = JSON.parse(JSON.stringify(workflow));
+    const changes = [];
 
-    fixedWorkflow = data.fixedWorkflow;
+    for (const fix of (result.fixes || [])) {
+      const node = fixed.nodes.find(n => n.name === fix.nodeName);
+      if (node && fix.fixedCode) {
+        if (node.parameters?.jsCode !== undefined) node.parameters.jsCode = fix.fixedCode;
+        else if (node.parameters?.code !== undefined) node.parameters.code = fix.fixedCode;
+        changes.push({ node: fix.nodeName, description: fix.description || '코드 수정됨' });
+      }
+    }
+
+    if (changes.length === 0) {
+      throw new Error('수정할 노드를 찾지 못했습니다. 에러 정보를 더 자세히 입력해주세요.');
+    }
+
+    const data = { success: true, changes, usage: apiData.usage };
+    fixedWorkflow = fixed;
 
     // 변경사항 표시
     const changesEl = document.getElementById('fix-changes-list');
