@@ -92,15 +92,78 @@ const studentMap = {};
 
 function getVal(prop) {
   if (!prop) return '';
-  if (prop.type === 'rich_text' && prop.rich_text?.length > 0) return prop.rich_text[0].plain_text;
-  if (prop.type === 'title'    && prop.title?.length > 0)     return prop.title[0].plain_text;
-  if (prop.type === 'select'  && prop.select)                 return prop.select.name;
-  return '';
+  switch (prop.type) {
+    case 'title':       return prop.title?.[0]?.plain_text || '';
+    case 'rich_text':   return prop.rich_text?.[0]?.plain_text || '';
+    case 'select':      return prop.select?.name || '';
+    case 'multi_select': return (prop.multi_select || []).map(s => s.name).join(', ') || '';
+    case 'number':      return prop.number != null ? String(prop.number) : '';
+    case 'date':        return prop.date?.start || '';
+    case 'checkbox':    return prop.checkbox ? '✅' : '';
+    case 'status':      return prop.status?.name || '';
+    case 'url':         return prop.url || '';
+    case 'email':       return prop.email || '';
+    case 'phone_number': return prop.phone_number || '';
+    case 'created_time': return (prop.created_time || '').split('T')[0];
+    case 'formula': {
+      const f = prop.formula;
+      if (!f) return '';
+      if (f.type === 'string')  return f.string || '';
+      if (f.type === 'number')  return f.number != null ? String(f.number) : '';
+      if (f.type === 'boolean') return f.boolean ? 'true' : 'false';
+      if (f.type === 'date')    return f.date?.start || '';
+      if (typeof f.string !== 'undefined') return f.string || '';
+      return '';
+    }
+    case 'rollup': {
+      const arr = prop.rollup?.array;
+      if (!arr || arr.length === 0) return '';
+      return arr.map(item => {
+        if (item.type === 'title')     return item.title?.[0]?.plain_text || '';
+        if (item.type === 'rich_text') return item.rich_text?.[0]?.plain_text || '';
+        if (item.type === 'select')    return item.select?.name || '';
+        if (item.type === 'formula')   return item.formula?.string || '';
+        return '';
+      }).filter(Boolean).join(', ') || '';
+    }
+    case 'relation': return ''; // relation은 ID만 있어서 이름 추출 불가
+    default: return '';
+  }
+}
+
+// 이름 정규화: 공백, 특수문자 정리
+function normalizeName(n) {
+  return (n || '').trim().replace(/\\s+/g, '');
 }
 
 for (const item of items) {
   const props = item.json.properties;
-  const name = getVal(props[${JSON.stringify(nameField)}]);
+  let name = '';
+
+  // 1) 지정된 이름 필드에서 추출
+  name = getVal(props[${JSON.stringify(nameField)}]);
+
+  // 2) 실패 시 title 타입 필드에서 자동 추출
+  if (!name) {
+    for (const [key, val] of Object.entries(props)) {
+      if (val.type === 'title' && val.title?.[0]?.plain_text) {
+        name = val.title[0].plain_text;
+        break;
+      }
+    }
+  }
+
+  // 3) 실패 시 모든 필드에서 '이름' 키워드가 포함된 필드 시도
+  if (!name) {
+    for (const [key, val] of Object.entries(props)) {
+      if (key.includes('이름') || key.includes('name') || key.includes('Name')) {
+        const v = getVal(val);
+        if (v) { name = v; break; }
+      }
+    }
+  }
+
+  name = normalizeName(name);
   if (name) {
     studentNames.push(name);
     studentMap[name] = { portfolio_page_id: item.json.id, name };
@@ -108,6 +171,10 @@ for (const item of items) {
 }
 
 console.log(\`대상 학생 \${studentNames.length}명: \${studentNames.join(', ')}\`);
+if (studentNames.length === 0) {
+  console.log('⚠️ 학생이름 추출 실패! 포트폴리오 DB에서 이름을 찾지 못했습니다.');
+  console.log('속성 목록:', Object.entries(items[0]?.json?.properties || {}).map(([k,v]) => k + '(' + v.type + ')').join(', '));
+}
 
 return { json: {
   studentNames,
@@ -183,10 +250,19 @@ function getVal(prop) {
 }
 
 function findName(props) {
+  // 1) 지정된 필드에서 추출
   const v = getVal(props[${JSON.stringify(nameFieldName)}]);
-  if (v) return v;
+  if (v) return v.trim();
+  // 2) title 타입 fallback
   for (const val of Object.values(props)) {
-    if (val.type === 'title' && val.title?.[0]?.plain_text) return val.title[0].plain_text;
+    if (val.type === 'title' && val.title?.[0]?.plain_text) return val.title[0].plain_text.trim();
+  }
+  // 3) '이름' 키워드가 포함된 필드 시도
+  for (const [key, val] of Object.entries(props)) {
+    if (key.includes('이름') || key.includes('name')) {
+      const r = getVal(val);
+      if (r) return r.trim();
+    }
   }
   return '';
 }
@@ -205,11 +281,17 @@ function inRange(dateStr) {
   return dateStr >= lastMonthStart && dateStr <= lastMonthEnd;
 }
 
+function normalize(s) { return (s || '').trim().replace(/\\s+/g, ''); }
+
 function matchStudent(rawName, studentNames) {
-  const names = rawName.split(/[,，、]/).map(n => n.trim()).filter(Boolean);
+  const names = rawName.split(/[,，、\\/]/).map(n => normalize(n)).filter(Boolean);
   for (const n of names) {
-    const found = studentNames.find(s => s === n || n.includes(s) || s.includes(n));
-    if (found) return found;
+    // 1) 정규화 후 정확 매칭
+    const exact = studentNames.find(s => normalize(s) === n);
+    if (exact) return exact;
+    // 2) 부분 매칭 (포함 관계)
+    const partial = studentNames.find(s => n.includes(normalize(s)) || normalize(s).includes(n));
+    if (partial) return partial;
   }
   return null;
 }
@@ -337,11 +419,17 @@ function inRange(dateStr) {
   return dateStr >= lastMonthStart && dateStr <= lastMonthEnd;
 }
 
+function normalize(s) { return (s || '').trim().replace(/\\s+/g, ''); }
+
 function matchStudent(rawName, studentNames) {
-  const names = rawName.split(/[,，、]/).map(n => n.trim()).filter(Boolean);
+  const names = rawName.split(/[,，、\\/]/).map(n => normalize(n)).filter(Boolean);
   for (const n of names) {
-    const found = studentNames.find(s => s === n || n.includes(s) || s.includes(n));
-    if (found) return found;
+    // 1) 정규화 후 정확 매칭
+    const exact = studentNames.find(s => normalize(s) === n);
+    if (exact) return exact;
+    // 2) 부분 매칭 (포함 관계)
+    const partial = studentNames.find(s => n.includes(normalize(s)) || normalize(s).includes(n));
+    if (partial) return partial;
   }
   return null;
 }
