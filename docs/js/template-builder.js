@@ -136,35 +136,72 @@ function normalizeName(n) {
   return (n || '').trim().replace(/\\s+/g, '');
 }
 
+// 이모지 제거 함수 (속성명 매칭용)
+function stripEmoji(s) {
+  return (s || '').replace(/[\\u{1F000}-\\u{1FFFF}]|[\\u{2600}-\\u{27BF}]|[\\u{FE00}-\\u{FEFF}]|[\\u{1F900}-\\u{1F9FF}]|[\\u{200D}]|[\\u{20E3}]|[\\u{E0020}-\\u{E007F}]|[\\uFE0F]|🅰️|🅱️|Ⓜ️|🅾️|🅿️|🆎|🆑-🆚|🈁|🈂️|🈚|🈯|🈲-🈺|🉐|🉑/gu, '').trim();
+}
+
+// 속성명 퍼지 매칭: 정확 매칭 → 이모지 제거 후 매칭 → 포함 매칭
+function findProp(props, targetName) {
+  // 1) 정확 매칭
+  if (props[targetName]) return props[targetName];
+  // 2) 이모지 제거 후 매칭
+  const stripped = stripEmoji(targetName);
+  for (const [key, val] of Object.entries(props)) {
+    if (stripEmoji(key) === stripped) return val;
+  }
+  // 3) 포함 매칭 (이름 → 🅰️이름 매칭)
+  for (const [key, val] of Object.entries(props)) {
+    if (stripEmoji(key).includes(stripped) || stripped.includes(stripEmoji(key))) return val;
+  }
+  return null;
+}
+
+// 날짜 패턴 체크
+function looksLikeDate(s) {
+  if (!s) return false;
+  return /^\\d{4}-\\d{2}/.test(s) || /^\\d{4}년/.test(s) || /^\\d{4}-\\d/.test(s);
+}
+
 for (const item of items) {
   const props = item.json.properties;
   let name = '';
 
-  // 1) 지정된 이름 필드에서 추출
-  name = getVal(props[${JSON.stringify(nameField)}]);
+  // 1) 지정된 이름 필드에서 추출 (이모지 포함 퍼지 매칭)
+  const nameProp = findProp(props, ${JSON.stringify(nameField)});
+  if (nameProp) name = getVal(nameProp);
 
-  // 2) 실패 시 title 타입 필드에서 자동 추출
-  if (!name) {
-    for (const [key, val] of Object.entries(props)) {
-      if (val.type === 'title' && val.title?.[0]?.plain_text) {
-        name = val.title[0].plain_text;
-        break;
-      }
+  // 2) 실패 시 이름 관련 필드 탐색 (formula 우선)
+  if (!name || looksLikeDate(name)) {
+    const nameEntries = Object.entries(props)
+      .filter(([k]) => {
+        const sk = stripEmoji(k);
+        return sk.includes('이름') || sk.includes('name') || sk.includes('Name');
+      })
+      .sort((a, b) => {
+        const order = { formula: 0, rich_text: 1, title: 2 };
+        const oa = order[a[1].type] !== undefined ? order[a[1].type] : 9;
+        const ob = order[b[1].type] !== undefined ? order[b[1].type] : 9;
+        return oa - ob;
+      });
+    for (const [key, val] of nameEntries) {
+      const v = getVal(val);
+      if (v && !looksLikeDate(v)) { name = v; break; }
     }
   }
 
-  // 3) 실패 시 모든 필드에서 '이름' 키워드가 포함된 필드 시도
-  if (!name) {
+  // 3) 실패 시 title 타입 fallback (날짜 제외)
+  if (!name || looksLikeDate(name)) {
     for (const [key, val] of Object.entries(props)) {
-      if (key.includes('이름') || key.includes('name') || key.includes('Name')) {
-        const v = getVal(val);
-        if (v) { name = v; break; }
+      if (val.type === 'title' && val.title?.[0]?.plain_text) {
+        const t = val.title[0].plain_text.trim();
+        if (t && !looksLikeDate(t)) { name = t; break; }
       }
     }
   }
 
   name = normalizeName(name);
-  if (name) {
+  if (name && !looksLikeDate(name)) {
     studentNames.push(name);
     studentMap[name] = { portfolio_page_id: item.json.id, name };
   }
@@ -172,8 +209,11 @@ for (const item of items) {
 
 console.log(\`대상 학생 \${studentNames.length}명: \${studentNames.join(', ')}\`);
 if (studentNames.length === 0) {
-  console.log('⚠️ 학생이름 추출 실패! 포트폴리오 DB에서 이름을 찾지 못했습니다.');
-  console.log('속성 목록:', Object.entries(items[0]?.json?.properties || {}).map(([k,v]) => k + '(' + v.type + ')').join(', '));
+  console.log('⚠️ 학생이름 추출 실패!');
+  const sampleProps = items[0]?.json?.properties;
+  if (sampleProps) {
+    console.log('속성 목록:', Object.entries(sampleProps).map(([k,v]) => k + '(' + v.type + ')=' + getVal(v).slice(0,20)).join(', '));
+  }
 }
 
 return { json: {
