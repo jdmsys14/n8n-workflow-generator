@@ -316,7 +316,7 @@ for (const page of pages) {
     grouped[matchedName] = {
       student_name: matchedName,
       reportPeriod, classPeriod,
-      page_id: studentMap[matchedName]?.portfolio_page_id || '',
+      page_id: studentMap[matchedName] ? studentMap[matchedName].portfolio_page_id : '',
       logs: [],
       fieldNames: ${JSON.stringify(dataFields.map(f => f.name))}
     };
@@ -360,9 +360,20 @@ return students;`;
       const nt = prop.classLog.note;
       const st = prop.classLog.status || ['✅상태', '상태'];
 
-      function makeGetValChain(fields) {
-        return fields.map(f => `getVal(props[${JSON.stringify(f)}])`).join(' || ');
+      // n8n Code 노드에서 || 를 안전하게 사용하기 위해 함수로 래핑
+      function makeGetValFunc(fields, varName) {
+        const lines = fields.map(f => `  v = getVal(props[${JSON.stringify(f)}]); if (v) return v;`);
+        return `function get_${varName}(props) {\n  let v;\n${lines.join('\n')}\n  return '';\n}`;
       }
+      // 사용할 필드별 헬퍼 함수 정의
+      const fieldHelpers = [
+        makeGetValFunc(co, 'course'),
+        makeGetValFunc(tb, 'textbook'),
+        makeGetValFunc(ct, 'content'),
+        makeGetValFunc(hw, 'homework'),
+        makeGetValFunc(nt, 'note'),
+      ].join('\n');
+      const statusHelper = makeGetValFunc(st, 'status');
 
       return `// 이름 매칭 & 학생별 수업일지 그룹화
 const sd    = $('학생 이름 추출').first().json;
@@ -400,6 +411,9 @@ function getVal(prop) {
     default: return '';
   }
 }
+
+${fieldHelpers}
+${statusHelper}
 
 function findName(props) {
   ${sn.map(f => `{ const v = getVal(props[${JSON.stringify(f)}]); if (v) return v; }`).join('\n  ')}
@@ -451,22 +465,24 @@ for (const page of pages) {
 
   matched++;
   if (!grouped[matchedName]) {
+    const pid = studentMap[matchedName] ? studentMap[matchedName].portfolio_page_id : '';
     grouped[matchedName] = {
       student_name: matchedName,
       reportPeriod, classPeriod,
-      page_id: studentMap[matchedName]?.portfolio_page_id || '',
+      page_id: pid,
       logs: []
     };
   }
 
-  const status = ${st.map(f => `getVal(props[${JSON.stringify(f)}])`).join(' || ')} || '';
+  const status = get_status(props);
+  const courseVal = status === '결석' ? '결석' : get_course(props);
   grouped[matchedName].logs.push({
     date:     findDate(props, page.created_time),
-    course:   status === '결석' ? '결석' : (${makeGetValChain(co)}),
-    textbook: ${makeGetValChain(tb)},
-    content:  ${makeGetValChain(ct)},
-    homework: ${makeGetValChain(hw)},
-    note:     ${makeGetValChain(nt)}
+    course:   courseVal,
+    textbook: get_textbook(props),
+    content:  get_content(props),
+    homework: get_homework(props),
+    note:     get_note(props)
   });
 }
 
