@@ -849,8 +849,11 @@ const apiBody = {
 ${writingDirective}
 
 학생: \${s.student_name} / 기간: \${classPeriod}
-총 수업: \${logs.length}회 (결석 \${absentLogs.length}회, 수업 \${actualLessons.length}회)
-진행과정: \${courseSummaryText}
+총 수업일지: \${logs.length}건 (결석 \${absentLogs.length}건, 실수업 \${actualLessons.length}건)
+진행과정: \${courseSummaryText || '정보 없음'}
+
+⚠️ lesson_count는 반드시 실수업 횟수(\${actualLessons.length})를, absent_count는 결석 횟수(\${absentLogs.length})를 사용하세요.
+stats의 출석률은 (실수업/총수업)*100으로 계산하세요. 총수업이 0이면 0%로 표시.
 \${hasIllnessAbsent ? \`\\n⚠️ 병결 감지: 수술/입원 등 건강 사유 결석이 있음 (관련 기록: \${illnessLogs.map(l=>\`\${l.date} \${l.note||l.content}\`).join(' / ')})\` : ''}
 
 === 수업 기록 ===
@@ -1072,7 +1075,13 @@ function buildAttention() {
 function highlightIllnessText(rawText) {
   if (!rawText) return '';
   function escSeg(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // 허용 태그를 플레이스홀더로 보호 → 이스케이프 → 복원
+    var safe = String(s);
+    var tags = [];
+    safe = safe.replace(/<(\\/?(strong|em|br|b|i))(\\s*\\/?)>/gi, function(m){ tags.push(m); return '%%TAG'+(tags.length-1)+'%%'; });
+    safe = safe.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    for (var i = 0; i < tags.length; i++) { safe = safe.replace('%%TAG'+i+'%%', tags[i]); }
+    return safe;
   }
   var tokens = [];
   var remain = rawText;
