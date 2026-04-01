@@ -311,17 +311,11 @@ textarea{resize:vertical;min-height:80px}
               <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
               <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px">수업일지 속성</div>
               <div id="detected-props"></div>
-              <table class="prop-table">
-                <tr><th style="width:120px">항목</th><th>속성명 (쉼표로 여러 후보)</th></tr>
-                <tr><td>학생 이름</td><td><input type="text" id="p-cl-name" value="이름, 이름 입력"></td></tr>
-                <tr><td>수업 날짜</td><td><input type="text" id="p-cl-date" value="수업 날짜, 수업날짜"></td></tr>
-                <tr><td>과정</td><td><input type="text" id="p-cl-course" value="과정, 수업과정"></td></tr>
-                <tr><td>교재</td><td><input type="text" id="p-cl-textbook" value="교재, 교재명"></td></tr>
-                <tr><td>수업내용</td><td><input type="text" id="p-cl-content" value="수업내용, 수업 내용, 내용"></td></tr>
-                <tr><td>과제</td><td><input type="text" id="p-cl-homework" value="과제, 숙제"></td></tr>
-                <tr><td>특이사항</td><td><input type="text" id="p-cl-note" value="특이사항, 개선 사항"></td></tr>
-                <tr><td>상태(결석판별)</td><td><input type="text" id="p-cl-status" value="✅상태, 상태"></td></tr>
-              </table>
+              <div id="prop-mapping-area">
+                <div style="color:var(--text3);font-size:12px;padding:20px;text-align:center;background:var(--surface2);border-radius:8px">
+                  ⬆ 위에서 <strong>속성 자동 감지</strong> 버튼을 먼저 눌러주세요.<br>감지된 속성이 드롭다운으로 표시됩니다.
+                </div>
+              </div>
             </div>
           </div>
           <div style="display:flex;justify-content:space-between">
@@ -622,6 +616,92 @@ function switchTab(name, tabEl) {
 const API_BASE = 'https://n8n-workflow-api.jigumdo.workers.dev';
 
 // ── Notion 속성 자동 감지 ──
+// 감지된 속성 데이터 저장
+let detectedClassLogProps = [];
+let detectedPortfolioProps = [];
+
+// 매핑 항목 정의 (역할 → 설명, 추천 type)
+const CLASSLOG_ROLES = [
+  { key: 'studentName', label: '학생 이름', desc: '학생을 식별하는 속성', types: ['title','rich_text','formula','relation'] },
+  { key: 'date', label: '수업 날짜', desc: '수업 일자', types: ['date','created_time'] },
+  { key: 'course', label: '과정/과목', desc: '수업 과정 또는 과목명', types: ['select','multi_select','rich_text','title'] },
+  { key: 'textbook', label: '교재', desc: '사용 교재', types: ['select','rich_text','relation'] },
+  { key: 'content', label: '수업내용', desc: '수업에서 다룬 내용', types: ['rich_text','title'] },
+  { key: 'homework', label: '과제', desc: '부여된 과제', types: ['rich_text','checkbox'] },
+  { key: 'note', label: '특이사항', desc: '메모, 비고 등', types: ['rich_text'] },
+  { key: 'status', label: '상태(결석판별)', desc: '출석/결석 등 상태', types: ['select','status','checkbox'] },
+];
+
+function buildSelectOptions(props, recommendedTypes, currentValue) {
+  let html = '<option value="">(사용 안 함)</option>';
+  // 추천 속성 (type 일치)
+  const recommended = props.filter(p => recommendedTypes.includes(p.type));
+  const others = props.filter(p => !recommendedTypes.includes(p.type));
+
+  if (recommended.length > 0) {
+    html += '<optgroup label="── 추천 (타입 일치) ──">';
+    for (const p of recommended) {
+      const sel = p.name === currentValue ? ' selected' : '';
+      html += `<option value="${p.name}"${sel}>${p.name} (${p.type})</option>`;
+    }
+    html += '</optgroup>';
+  }
+  if (others.length > 0) {
+    html += '<optgroup label="── 기타 속성 ──">';
+    for (const p of others) {
+      const sel = p.name === currentValue ? ' selected' : '';
+      html += `<option value="${p.name}"${sel}>${p.name} (${p.type})</option>`;
+    }
+    html += '</optgroup>';
+  }
+  return html;
+}
+
+function renderMappingUI() {
+  const area = document.getElementById('prop-mapping-area');
+  if (detectedClassLogProps.length === 0) {
+    area.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:20px;text-align:center;background:var(--surface2);border-radius:8px">⬆ 위에서 <strong>속성 자동 감지</strong> 버튼을 먼저 눌러주세요.</div>';
+    return;
+  }
+
+  // 자동 추천 매핑
+  const autoGuess = {};
+  for (const role of CLASSLOG_ROLES) {
+    const match = detectedClassLogProps.find(p =>
+      role.types.includes(p.type) && (
+        p.name.includes(role.label.replace(/[\/\(\)]/g,'')) ||
+        role.label.includes(p.name) ||
+        (role.key === 'studentName' && (p.name.includes('이름') || p.type === 'title')) ||
+        (role.key === 'date' && (p.name.includes('날짜') || p.name.includes('일자') || p.type === 'date')) ||
+        (role.key === 'course' && (p.name.includes('과정') || p.name.includes('과목'))) ||
+        (role.key === 'textbook' && p.name.includes('교재')) ||
+        (role.key === 'content' && (p.name.includes('내용') || p.name.includes('수업내용'))) ||
+        (role.key === 'homework' && (p.name.includes('과제') || p.name.includes('숙제'))) ||
+        (role.key === 'note' && (p.name.includes('특이') || p.name.includes('메모') || p.name.includes('비고') || p.name.includes('개선'))) ||
+        (role.key === 'status' && (p.name.includes('상태') || p.name.includes('출석')))
+      )
+    );
+    if (match) autoGuess[role.key] = match.name;
+  }
+
+  let html = '<table class="prop-table"><tr><th style="width:130px">항목</th><th>Notion 속성 선택</th></tr>';
+  for (const role of CLASSLOG_ROLES) {
+    const guess = autoGuess[role.key] || '';
+    html += `<tr>
+      <td><strong>${role.label}</strong><div style="font-size:10px;color:var(--text3)">${role.desc}</div></td>
+      <td><select id="p-cl-${role.key}" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff">
+        ${buildSelectOptions(detectedClassLogProps, role.types, guess)}
+      </select></td>
+    </tr>`;
+  }
+  html += '</table>';
+
+  const mappedCount = Object.keys(autoGuess).length;
+  html = `<div style="font-size:11px;color:var(--green);margin-bottom:8px;font-weight:600">✅ ${detectedClassLogProps.length}개 속성 감지됨 · ${mappedCount}개 자동 매핑</div>` + html;
+
+  area.innerHTML = html;
+}
+
 async function detectProperties() {
   const apiKey = val('n-api-key');
   const portfolioDbId = val('n-portfolio-db');
@@ -646,64 +726,44 @@ async function detectProperties() {
     const clData = await clResp.json();
     if (!clData.success) throw new Error(clData.error || '수업일지 DB 감지 실패');
 
+    detectedClassLogProps = Object.values(clData.properties);
+
     // 포트폴리오 DB 속성 감지 (있으면)
-    let pfData = null;
     if (portfolioDbId) {
       const pfResp = await fetch(`${API_BASE}/api/notion/detect-properties`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey, databaseId: portfolioDbId }),
       });
-      pfData = await pfResp.json();
-    }
-
-    // 감지된 속성 표시
-    const propsEl = document.getElementById('detected-props');
-    const clProps = Object.values(clData.properties);
-    propsEl.innerHTML = `<div style="font-size:11px;color:var(--text3);margin-bottom:8px">
-      감지된 수업일지 속성: ${clProps.map(p => `<code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:10px">${p.name} (${p.type})</code>`).join(' ')}
-    </div>`;
-    document.getElementById('detected-badge').hidden = false;
-
-    // 속성명 자동 매핑
-    const propNames = clProps.map(p => p.name);
-    const autoMap = {
-      'p-cl-name': ['이름', '학생', '이름 입력', '학생이름', '학생 이름'],
-      'p-cl-date': ['수업 날짜', '수업날짜', '날짜', 'Date', '일자'],
-      'p-cl-course': ['과정', '수업과정', '반', '과목', '코스'],
-      'p-cl-textbook': ['교재', '교재명', '텍스트북', 'textbook'],
-      'p-cl-content': ['수업내용', '수업 내용', '내용', '진도', '학습내용'],
-      'p-cl-homework': ['과제', '숙제', '과제 내용', '과제내용'],
-      'p-cl-note': ['특이사항', '개선 사항', '메모', '비고', '참고'],
-    };
-
-    let mapped = 0;
-    for (const [inputId, candidates] of Object.entries(autoMap)) {
-      const found = candidates.filter(c => propNames.includes(c));
-      if (found.length > 0) {
-        document.getElementById(inputId).value = found.join(', ');
-        mapped++;
-      }
-    }
-
-    // 포트폴리오 속성 자동 매핑
-    if (pfData?.success) {
-      const pfProps = Object.values(pfData.properties).map(p => p.name);
-      const pfMap = {
-        'p-pf-name': ['이름', '학생', '학생이름'],
-        'p-pf-url': ['url', 'URL', '링크', '보고서'],
-        'p-pf-ready': ['(준)생성', '준비', '생성준비'],
-        'p-pf-done': ['(완)생성', '완료', '생성완료'],
-      };
-      for (const [inputId, candidates] of Object.entries(pfMap)) {
-        const found = candidates.filter(c => pfProps.includes(c));
-        if (found.length > 0) {
-          document.getElementById(inputId).value = found[0];
+      const pfData = await pfResp.json();
+      if (pfData.success) {
+        detectedPortfolioProps = Object.values(pfData.properties);
+        // 포트폴리오 속성 자동 매핑
+        const pfNames = detectedPortfolioProps.map(p => p.name);
+        const pfMap = {
+          'p-pf-name': ['이름', '학생', '학생이름'],
+          'p-pf-url': ['url', 'URL', '링크', '보고서'],
+          'p-pf-ready': ['(준)생성', '준비', '생성준비'],
+          'p-pf-done': ['(완)생성', '완료', '생성완료'],
+        };
+        for (const [inputId, candidates] of Object.entries(pfMap)) {
+          const found = candidates.find(c => pfNames.includes(c));
+          if (found) document.getElementById(inputId).value = found;
         }
       }
     }
 
-    showAlert('success', `속성 자동 감지 완료! 수업일지 ${clProps.length}개 속성 감지, ${mapped}개 자동 매핑됨.`);
+    // 감지된 속성 목록 표시
+    const propsEl = document.getElementById('detected-props');
+    propsEl.innerHTML = `<div style="font-size:11px;color:var(--text3);margin-bottom:8px">
+      감지된 수업일지 속성: ${detectedClassLogProps.map(p => `<code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:10px">${p.name} (${p.type})</code>`).join(' ')}
+    </div>`;
+    document.getElementById('detected-badge').hidden = false;
+
+    // 동적 매핑 UI 렌더링
+    renderMappingUI();
+
+    showAlert('success', `속성 자동 감지 완료! DB별 속성이 드롭다운에 표시됩니다. 각 항목에 맞는 속성을 선택해주세요.`);
 
   } catch(e) {
     showAlert('error', '속성 감지 실패: ' + e.message);
@@ -733,7 +793,7 @@ async function saveNotionConfig() {
       portfolioUrl: val('p-pf-url'),
       portfolioReady: val('p-pf-ready'),
       portfolioDone: val('p-pf-done'),
-      studentName: val('p-cl-name'),
+      studentName: val('p-cl-studentName'),
       date: val('p-cl-date'),
       course: val('p-cl-course'),
       textbook: val('p-cl-textbook'),
