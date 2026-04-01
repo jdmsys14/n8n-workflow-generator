@@ -1398,7 +1398,7 @@ return { json: {
           pageId: { __rl: true, mode: 'id', value: '={{ $json.page_id }}' },
           propertiesUi: { propertyValues: [
             { key: `${prop.portfolio.doneCheckbox}|checkbox`, checkboxValue: true },
-            { key: `${prop.portfolio.readyCheckbox}|checkbox` },
+            { key: `${prop.portfolio.readyCheckbox}|checkbox`, checkboxValue: false },
             { key: `${prop.portfolio.urlField}|url`, urlValue: '={{ $json.pages_url }}' }
           ] },
           options: {}
