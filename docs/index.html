@@ -476,23 +476,33 @@ textarea{resize:vertical;min-height:80px}
 
         <!-- TAB: n8n 코드 수정 -->
         <div class="tab-panel" id="tab-code-edit">
+          <!-- 히스토리 -->
+          <details id="fix-history-panel" style="margin-bottom:12px">
+            <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--text2);padding:10px 0">&#128203; 수정 히스토리 <span id="fix-history-count" style="font-size:11px;color:var(--text3);font-weight:400"></span></summary>
+            <div id="fix-history-list" style="max-height:240px;overflow-y:auto"></div>
+          </details>
+
+          <!-- 입력 폼 -->
           <div class="card">
             <div class="card-head">
               <div class="card-icon orange">&#128295;</div>
-              <div><div class="card-title">n8n 코드 수정</div><div class="card-desc">n8n에서 에러가 발생한 워크플로우를 AI로 자동 수정합니다</div></div>
+              <div><div class="card-title">n8n 코드 수정</div><div class="card-desc">에러 정보를 입력하면 AI가 워크플로우를 분석하고 수정합니다</div></div>
+              <div id="fix-round-badge" style="margin-left:auto;display:none">
+                <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;background:var(--orange-light);color:var(--orange)">연속 수정 중</span>
+              </div>
             </div>
             <div class="card-body">
               <div class="field">
                 <div class="field-label"><span class="req">*</span> 워크플로우 JSON</div>
                 <div style="display:flex;gap:8px;margin-bottom:6px">
-                  <button class="btn btn-sm btn-secondary" onclick="loadLastWorkflowToEditor()">&#128229; 마지막 생성 워크플로우 불러오기</button>
-                  <button class="btn btn-sm btn-secondary" onclick="document.getElementById('fix-wf-json').value=''">&#128465; 비우기</button>
+                  <button class="btn btn-sm btn-secondary" onclick="loadLastWorkflowToEditor()">&#128229; 마지막 워크플로우 불러오기</button>
+                  <button class="btn btn-sm btn-secondary" onclick="document.getElementById('fix-wf-json').value='';fixRound=0;document.getElementById('fix-round-badge').style.display='none'">&#128465; 초기화</button>
                 </div>
-                <textarea id="fix-wf-json" rows="8" placeholder="n8n 워크플로우 JSON을 붙여넣으세요..." style="font-family:monospace;font-size:11px;width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;resize:vertical"></textarea>
+                <textarea id="fix-wf-json" rows="6" placeholder="n8n 워크플로우 JSON을 붙여넣으세요..." style="font-family:monospace;font-size:11px;width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;resize:vertical"></textarea>
               </div>
               <div class="field">
                 <div class="field-label"><span class="req">*</span> 에러 정보</div>
-                <textarea id="fix-error-text" rows="4" placeholder="n8n에서 발생한 에러 메시지를 붙여넣으세요...&#10;예: ERROR: The property &quot;name&quot; does not exist on item..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;resize:vertical;font-size:13px"></textarea>
+                <textarea id="fix-error-text" rows="4" placeholder="n8n에서 발생한 에러 메시지를 붙여넣으세요...&#10;예: Unexpected token '||' [line 92] SyntaxError" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;resize:vertical;font-size:13px"></textarea>
               </div>
               <div class="field">
                 <div class="field-label">에러 스크린샷 (선택)</div>
@@ -503,12 +513,10 @@ textarea{resize:vertical;min-height:80px}
                     <button class="btn btn-sm" onclick="clearErrorImage()" style="font-size:10px;padding:2px 6px">✕</button>
                   </div>
                 </div>
-                <div class="field-hint">n8n 에러 화면을 캡처하여 업로드하면 더 정확한 수정이 가능합니다</div>
               </div>
               <div class="field">
                 <div class="field-label"><span class="req">*</span> Claude API Key</div>
                 <input type="text" id="fix-api-key" placeholder="sk-ant-xxxxx">
-                <div class="field-hint">워크플로우 분석 및 수정에 사용됩니다</div>
               </div>
               <div style="margin-top:16px">
                 <button class="btn btn-success btn-lg" id="btn-fix-workflow" onclick="fixWorkflow()" style="width:100%">&#128295; 코드 수정 요청</button>
@@ -533,6 +541,19 @@ textarea{resize:vertical;min-height:80px}
                   <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text2)">수정된 JSON 전체 보기</summary>
                   <div class="json-output" id="fix-json-output" style="max-height:400px;margin-top:8px"></div>
                 </details>
+              </div>
+            </div>
+            <!-- 연속 수정 -->
+            <div class="card" style="border-left:4px solid var(--orange)">
+              <div class="card-head">
+                <div class="card-icon orange">&#128260;</div>
+                <div><div class="card-title">아직 에러가 있나요?</div><div class="card-desc">수정된 워크플로우가 에디터에 자동 반영되었습니다. 새 에러만 입력하세요.</div></div>
+              </div>
+              <div class="card-body">
+                <textarea id="fix-retry-error" rows="3" placeholder="새로 발생한 에러 메시지를 입력하세요..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;resize:vertical;font-size:13px"></textarea>
+                <div style="margin-top:8px">
+                  <button class="btn btn-warning btn-lg" onclick="retryFix()" style="width:100%">&#128260; 재수정 요청</button>
+                </div>
               </div>
             </div>
           </div>
@@ -1441,53 +1462,114 @@ function downloadRegenJson() {
 }
 
 // ══════════════════════════════════════════════
-// ── n8n 코드 수정 기능 ──
+// ── n8n 코드 수정 기능 (히스토리 + 고도화) ──
 // ══════════════════════════════════════════════
 
 let fixedWorkflow = null;
 let errorImageBase64 = null;
+let fixRound = 0; // 연속 수정 횟수
+let fixSessionHistory = []; // 현재 세션의 수정 이력 (프롬프트용)
+
+const FIX_HISTORY_KEY = 'wfgen_fix_history';
+const FIX_HISTORY_MAX = 20;
+
+function fixHistoryLoad() {
+  try { return JSON.parse(localStorage.getItem(FIX_HISTORY_KEY) || '[]'); } catch(e) { return []; }
+}
+function fixHistorySave(list) {
+  while (list.length > FIX_HISTORY_MAX) list.shift();
+  localStorage.setItem(FIX_HISTORY_KEY, JSON.stringify(list));
+}
+function fixHistoryAdd(entry) {
+  const list = fixHistoryLoad();
+  list.push(entry);
+  fixHistorySave(list);
+  renderFixHistory();
+}
+function fixHistoryDelete(id) {
+  const list = fixHistoryLoad().filter(h => h.id !== id);
+  fixHistorySave(list);
+  renderFixHistory();
+}
+
+function renderFixHistory() {
+  const list = fixHistoryLoad();
+  const countEl = document.getElementById('fix-history-count');
+  const listEl = document.getElementById('fix-history-list');
+  countEl.textContent = list.length > 0 ? `(${list.length}건)` : '';
+
+  if (list.length === 0) {
+    listEl.innerHTML = '<div style="padding:12px;color:var(--text3);font-size:12px;text-align:center">수정 이력이 없습니다</div>';
+    return;
+  }
+
+  listEl.innerHTML = list.slice().reverse().map((h, ri) => {
+    const num = list.length - ri;
+    const time = new Date(h.timestamp).toLocaleString('ko');
+    const nodes = (h.changes || []).map(c => c.node).join(', ') || '-';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px">
+      <span style="font-weight:700;color:var(--accent);min-width:24px">#${num}</span>
+      <span style="color:var(--text3);min-width:130px">${time}</span>
+      <span style="flex:1"><strong>${esc(h.academyName || '-')}</strong> · ${esc(nodes)}</span>
+      <span style="color:var(--text3);font-size:10px">${h.errorText?.slice(0,30) || ''}...</span>
+      <button class="btn btn-sm btn-secondary" style="font-size:10px;padding:2px 8px" onclick="loadFixHistory('${h.id}')">불러오기</button>
+      <button class="btn btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red)" onclick="fixHistoryDelete('${h.id}')">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function loadFixHistory(id) {
+  const h = fixHistoryLoad().find(x => x.id === id);
+  if (!h) return;
+  if (h.workflowAfter) {
+    document.getElementById('fix-wf-json').value = JSON.stringify(h.workflowAfter, null, 2);
+    fixedWorkflow = h.workflowAfter;
+  }
+  showAlert('success', `#${id} 수정본을 에디터에 불러왔습니다.`);
+}
 
 function loadLastWorkflowToEditor() {
   const ta = document.getElementById('fix-wf-json');
-  if (lastWorkflow) {
-    ta.value = JSON.stringify(lastWorkflow, null, 2);
-    showAlert('success', '마지막 생성 워크플로우를 불러왔습니다.');
-  } else if (lastRegenWorkflow) {
-    ta.value = JSON.stringify(lastRegenWorkflow, null, 2);
-    showAlert('success', '재생성된 워크플로우를 불러왔습니다.');
-  } else {
-    // localStorage에서 시도
+  if (lastWorkflow) { ta.value = JSON.stringify(lastWorkflow, null, 2); showAlert('success', '워크플로우를 불러왔습니다.'); }
+  else if (lastRegenWorkflow) { ta.value = JSON.stringify(lastRegenWorkflow, null, 2); showAlert('success', '워크플로우를 불러왔습니다.'); }
+  else {
     const keys = Object.keys(localStorage).filter(k => k.startsWith('wfgen_last_'));
     if (keys.length > 0) {
-      try {
-        const wf = JSON.parse(localStorage.getItem(keys[keys.length - 1]));
-        ta.value = JSON.stringify(wf, null, 2);
-        showAlert('success', '저장된 워크플로우를 불러왔습니다.');
-      } catch(e) { showAlert('error', '저장된 워크플로우가 없습니다.'); }
-    } else {
-      showAlert('error', '불러올 워크플로우가 없습니다. 먼저 워크플로우를 생성하거나 JSON을 직접 붙여넣으세요.');
-    }
+      try { ta.value = JSON.stringify(JSON.parse(localStorage.getItem(keys[keys.length - 1])), null, 2); showAlert('success', '저장된 워크플로우를 불러왔습니다.'); }
+      catch(e) { showAlert('error', '불러올 워크플로우가 없습니다.'); }
+    } else { showAlert('error', '불러올 워크플로우가 없습니다.'); }
   }
+  fixRound = 0; fixSessionHistory = [];
+  document.getElementById('fix-round-badge').style.display = 'none';
 }
 
 function previewErrorImage(input) {
-  const file = input.files[0];
-  if (!file) return;
+  const file = input.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = function(e) {
-    errorImageBase64 = e.target.result; // data:image/xxx;base64,...
+    errorImageBase64 = e.target.result;
     document.getElementById('fix-image-thumb').src = errorImageBase64;
     document.getElementById('fix-image-preview').style.display = 'flex';
   };
   reader.readAsDataURL(file);
 }
-
 function clearErrorImage() {
   errorImageBase64 = null;
   document.getElementById('fix-error-image').value = '';
   document.getElementById('fix-image-preview').style.display = 'none';
 }
 
+// 재수정 (연속 수정 UI에서 호출)
+function retryFix() {
+  const newError = document.getElementById('fix-retry-error').value.trim();
+  if (!newError) { showAlert('error', '새 에러 메시지를 입력해주세요.'); return; }
+  // 에디터에 현재 수정본이 이미 반영되어 있으므로 에러만 업데이트
+  document.getElementById('fix-error-text').value = newError;
+  document.getElementById('fix-retry-error').value = '';
+  fixWorkflow();
+}
+
+// 메인 수정 함수
 async function fixWorkflow() {
   const jsonStr = document.getElementById('fix-wf-json').value.trim();
   const errorText = document.getElementById('fix-error-text').value.trim();
@@ -1508,60 +1590,90 @@ async function fixWorkflow() {
   document.getElementById('fix-result').style.display = 'none';
 
   try {
-    // 워크플로우에서 Code 노드 코드 추출
     const nodeNames = (workflow.nodes || []).map(n => n.name);
     const codeNodes = (workflow.nodes || []).filter(n => n.type === 'n8n-nodes-base.code');
     const codeNodeSummary = codeNodes.map(cn =>
       `--- [${cn.name}] ---\n${cn.parameters?.jsCode || cn.parameters?.code || '(코드 없음)'}`
     ).join('\n\n');
     const nodeList = nodeNames.map((n, i) => `  ${i+1}. ${n}`).join('\n');
-    const workflowStr = JSON.stringify(workflow, null, 2);
+
+    // 이전 수정 이력 컨텍스트
+    let prevFixContext = '';
+    if (fixSessionHistory.length > 0) {
+      prevFixContext = `\n## 이전 수정 이력 (이미 시도했으나 해결되지 않은 수정)\n` +
+        fixSessionHistory.map((h, i) =>
+          `#${i+1}: "${h.node}" 노드 - ${h.description} → 결과: 여전히 에러 (${h.nextError || '동일 에러'})`
+        ).join('\n') +
+        `\n⚠️ 위 수정으로 해결되지 않았습니다. 다른 원인을 분석하거나 다른 접근 방식을 시도하세요.\n`;
+    }
 
     // Claude API 메시지 구성
     const content = [];
-
-    // 이미지가 있으면 먼저
     if (errorImageBase64) {
       const m = errorImageBase64.match(/^data:image\/([^;]+);base64,(.+)$/);
-      if (m) {
-        content.push({ type: 'image', source: { type: 'base64', media_type: `image/${m[1]}`, data: m[2] } });
-      }
+      if (m) content.push({ type: 'image', source: { type: 'base64', media_type: `image/${m[1]}`, data: m[2] } });
     }
 
-    content.push({ type: 'text', text: `당신은 n8n 워크플로우 JSON 디버깅 전문가입니다.
+    content.push({ type: 'text', text: `당신은 n8n 워크플로우 디버깅 전문가입니다. 에러를 정밀하게 분석하고 수정하세요.
 
 ## 에러 정보
 ${errorText || '(위 스크린샷 참고)'}
-
+${prevFixContext}
 ## 워크플로우 노드 목록
 ${nodeList}
 
-## Code 노드 상세 (에러가 발생하는 JavaScript 코드)
+## Code 노드 JavaScript 코드 (에러 발생 가능 영역)
 ${codeNodeSummary || '(Code 노드 없음)'}
 
-## 수정 지침
-1. 에러 메시지를 분석하고, 문제가 있는 Code 노드를 찾으세요.
-2. 해당 노드의 **수정된 전체 JavaScript 코드**를 출력하세요.
-3. 주요 에러 패턴:
-   - "Unexpected token '||'" → || 연산자를 삼항연산자 (a ? a : b) 또는 if문으로 대체
-   - "Cannot read property" → optional chaining(?.) 사용
-   - "is not a function" → 함수 존재 확인
-4. n8n Code 노드 주의사항:
-   - 템플릿 리터럴 내의 \${} 표현식에서 || 사용 시 문제 발생 가능
-   - 복잡한 표현식은 변수로 먼저 할당 후 사용
+## n8n Code 노드 디버깅 가이드
 
-## 출력 형식 (순수 JSON만 출력. 마크다운 코드블록 절대 금지. { 로 시작 } 로 끝)
+### 알려진 에러 패턴 & 해결법
+1. **"Unexpected token '||'" / SyntaxError**
+   - 원인: 템플릿 리터럴 \`\${}\` 안에서 || 사용 시 n8n 파서가 오류 발생
+   - 해결: 복잡한 표현식을 변수로 먼저 추출
+   - 예시 (틀림): \`\${getValue(a) || getValue(b)}\`
+   - 예시 (맞음): const val = getValue(a) || getValue(b); 후 \`\${val}\` 사용
+
+2. **"Cannot read properties of undefined"**
+   - 원인: 중첩 객체 접근 시 중간 값이 없음
+   - 해결: optional chaining 사용 (a?.b?.c)
+
+3. **"XX is not a function"**
+   - 원인: 함수명 오타 또는 미정의
+   - 해결: 함수 정의 확인, 올바른 n8n 함수 사용
+
+4. **"Cannot read property of null (reading 'json')"**
+   - 원인: 이전 노드 참조 실패 ($('노드명') 결과가 없음)
+   - 해결: 노드명이 정확한지 확인, 연결 상태 확인
+
+### n8n Code 노드 핵심 규칙
+- \`$input.item.json\`: 현재 아이템의 데이터
+- \`$('노드명').first().json\`: 특정 노드의 첫 번째 출력
+- \`$input.first().json\`: 입력의 첫 번째 아이템
+- 템플릿 리터럴 내부에 복잡한 JS 표현식(||, &&, 삼항)은 반드시 밖으로 추출
+- return 구문: 단일 아이템은 \`{json: {...}}\`, 배열은 \`[{json:...}, {json:...}]\`
+
+### Notion API 속성 접근 패턴
+- title: \`prop.title?.[0]?.plain_text\`
+- rich_text: \`prop.rich_text?.[0]?.plain_text\`
+- select: \`prop.select?.name\`
+- date: \`prop.date?.start\`
+- formula: \`prop.formula?.string || prop.formula?.number\`
+- checkbox: \`prop.checkbox\`
+- status: \`prop.status?.name\`
+
+## 출력 형식 (순수 JSON만. 마크다운 코드블록 절대 금지)
 {
+  "analysis": "에러 원인 분석 (한국어, 2-3문장)",
   "fixes": [
     {
-      "nodeName": "에러 발생 노드의 정확한 이름",
-      "fixedCode": "수정된 전체 JavaScript 코드 (이 코드가 jsCode 필드를 대체함)",
-      "description": "수정 내용 설명 (한국어)"
+      "nodeName": "수정할 노드의 정확한 이름",
+      "fixedCode": "수정된 전체 JavaScript 코드",
+      "description": "수정 내용 (한국어)"
     }
   ]
 }` });
 
-    // Claude API 직접 호출
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -1588,10 +1700,11 @@ ${codeNodeSummary || '(Code 노드 없음)'}
     catch(e2) {
       const m2 = raw.match(/\{[\s\S]*\}/);
       if (m2) { try { result = JSON.parse(m2[0]); } catch(e3) { throw new Error('AI 응답 파싱 실패. 다시 시도해주세요.'); } }
-      else { throw new Error('AI 응답 파싱 실패. 다시 시도해주세요.\n응답: ' + raw.slice(0, 200)); }
+      else { throw new Error('AI 응답 파싱 실패:\n' + raw.slice(0, 300)); }
     }
 
-    // 원본 워크플로우 복사 후 수정된 코드 적용
+    // 원본 복사 후 수정 적용
+    const workflowBefore = JSON.parse(JSON.stringify(workflow));
     const fixed = JSON.parse(JSON.stringify(workflow));
     const changes = [];
 
@@ -1604,33 +1717,58 @@ ${codeNodeSummary || '(Code 노드 없음)'}
       }
     }
 
-    if (changes.length === 0) {
-      throw new Error('수정할 노드를 찾지 못했습니다. 에러 정보를 더 자세히 입력해주세요.');
-    }
+    if (changes.length === 0) throw new Error('수정할 노드를 찾지 못했습니다. 에러 정보를 더 자세히 입력해주세요.');
 
-    const data = { success: true, changes, usage: apiData.usage };
     fixedWorkflow = fixed;
+    fixRound++;
 
-    // 변경사항 표시
-    const changesEl = document.getElementById('fix-changes-list');
-    if (data.changes && data.changes.length > 0) {
-      changesEl.innerHTML = `<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px">변경사항</div>` +
-        data.changes.map(c => `<div style="padding:6px 10px;background:var(--surface2);border-radius:8px;margin-bottom:4px;font-size:12px">
-          <strong style="color:var(--accent)">${esc(c.node || '전체')}</strong>: ${esc(c.description || c)}
-        </div>`).join('');
-    } else {
-      changesEl.innerHTML = '<div style="font-size:12px;color:var(--text3)">변경사항 정보 없음</div>';
+    // 세션 히스토리에 추가 (다음 수정 시 컨텍스트로 사용)
+    for (const c of changes) {
+      fixSessionHistory.push({ node: c.node, description: c.description, nextError: '' });
     }
 
-    // JSON 미리보기
+    // localStorage 히스토리에 저장
+    fixHistoryAdd({
+      id: 'fix_' + Date.now(),
+      academyName: currentSub?.basic?.academy || '-',
+      timestamp: new Date().toISOString(),
+      errorText: errorText?.slice(0, 200),
+      hasScreenshot: !!errorImageBase64,
+      changes,
+      analysis: result.analysis || '',
+      workflowAfter: fixed,
+      tokenUsage: apiData.usage ? (apiData.usage.input_tokens + apiData.usage.output_tokens) : 0,
+      round: fixRound,
+    });
+
+    // 수정된 워크플로우를 에디터에 자동 반영
+    document.getElementById('fix-wf-json').value = JSON.stringify(fixed, null, 2);
+    if (fixRound > 1) document.getElementById('fix-round-badge').style.display = '';
+
+    // UI 표시
+    const changesEl = document.getElementById('fix-changes-list');
+    let changesHtml = '';
+    if (result.analysis) {
+      changesHtml += `<div style="padding:8px 12px;background:var(--accent-light);border-radius:8px;margin-bottom:8px;font-size:12px;color:var(--accent-dark)"><strong>원인 분석:</strong> ${esc(result.analysis)}</div>`;
+    }
+    changesHtml += `<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px">변경사항 (수정 #${fixRound})</div>`;
+    changesHtml += changes.map(c => `<div style="padding:6px 10px;background:var(--surface2);border-radius:8px;margin-bottom:4px;font-size:12px">
+      <strong style="color:var(--accent)">${esc(c.node)}</strong>: ${esc(c.description)}
+    </div>`).join('');
+    changesEl.innerHTML = changesHtml;
+
     document.getElementById('fix-json-output').textContent = JSON.stringify(fixedWorkflow, null, 2);
     document.getElementById('fix-result-desc').textContent =
-      `${data.changes?.length || 0}개 항목 수정됨` + (data.usage ? ` · 토큰: ${data.usage.input_tokens + data.usage.output_tokens}` : '');
+      `수정 #${fixRound} · ${changes.length}개 노드 수정` + (apiData.usage ? ` · 토큰: ${apiData.usage.input_tokens + apiData.usage.output_tokens}` : '');
     document.getElementById('fix-result').style.display = '';
 
-    showAlert('success', '워크플로우 수정 완료! 아래에서 수정된 JSON을 다운로드하세요.');
+    showAlert('success', `워크플로우 수정 #${fixRound} 완료! 에디터에 자동 반영되었습니다.`);
 
   } catch(e) {
+    // 이전 수정 이력에 실패 에러 기록
+    if (fixSessionHistory.length > 0) {
+      fixSessionHistory[fixSessionHistory.length - 1].nextError = errorText?.slice(0, 100) || 'unknown';
+    }
     showAlert('error', '수정 실패: ' + e.message);
   } finally {
     btn.disabled = false;
@@ -1642,11 +1780,8 @@ function downloadFixedJson() {
   if (!fixedWorkflow) return;
   const name = currentSub?.basic?.academy || 'workflow';
   const blob = new Blob([JSON.stringify(fixedWorkflow, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${name}_fixed_workflow.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `${name}_fixed_v${fixRound || 1}.json`; a.click(); URL.revokeObjectURL(a.href);
 }
 
 function copyFixedJson() {
@@ -1658,6 +1793,7 @@ function copyFixedJson() {
 
 // ── 초기화 ──
 loadSubmissions();
+renderFixHistory();
 </script>
 </body>
 </html>
