@@ -409,7 +409,39 @@ ${logFieldsCode}
   });
 }
 
-console.log(\`모드: \${useDirectMode ? '직접' : '매칭'} / 매칭 \${matched} / 기간외 \${outOfRange} / 미매칭 \${unmatched}\`);
+console.log(\`1차 모드: \${useDirectMode ? '직접' : '매칭'} / 매칭 \${matched} / 기간외 \${outOfRange} / 미매칭 \${unmatched}\`);
+
+// ★ 매칭 모드에서 결과 0건이면 → 자동으로 직접 모드로 재시도
+if (matched === 0 && !useDirectMode && allNames.size > 0) {
+  console.log('⚠️ 매칭 0건! 수업일지 이름으로 직접 그룹핑 재시도...');
+  matched = 0; outOfRange = 0; unmatched = 0;
+
+  for (const page of pages) {
+    const props = page.properties || {};
+    const rawName = findName(props);
+    if (!rawName || looksLikeDate(rawName)) { unmatched++; continue; }
+
+    const logDate = findDate(props, page.created_time);
+    if (!inRange(logDate)) { outOfRange++; continue; }
+
+    matched++;
+    const finalName = rawName.trim();
+    if (!grouped[finalName]) {
+      grouped[finalName] = {
+        student_name: finalName,
+        reportPeriod, classPeriod,
+        page_id: '',
+        logs: [],
+        fieldNames: ${JSON.stringify(dataFields.map(f => f.name))}
+      };
+    }
+    grouped[finalName].logs.push({
+      date: findDate(props, page.created_time),
+${logFieldsCode}
+    });
+  }
+  console.log(\`2차 직접모드: 매칭 \${matched} / 기간외 \${outOfRange} / 미매칭 \${unmatched}\`);
+}
 
 const students = Object.values(grouped).map(s => {
   s.logs.sort((a,b) => new Date(a.date)-new Date(b.date));
@@ -425,7 +457,6 @@ if (students.length === 0) {
       total_pages: pages.length,
       studentNames_raw: studentNames,
       validStudentNames,
-      useDirectMode,
       all_names_in_db: [...allNames].sort()
     }
   }}];
@@ -607,7 +638,33 @@ for (const page of pages) {
   });
 }
 
-console.log(\`모드: \${useDirectMode ? '직접' : '매칭'} / 매칭 \${matched} / 기간외 \${outOfRange} / 미매칭 \${unmatched}\`);
+console.log(\`1차 모드: \${useDirectMode ? '직접' : '매칭'} / 매칭 \${matched} / 기간외 \${outOfRange} / 미매칭 \${unmatched}\`);
+
+// ★ 매칭 0건 → 직접 모드로 재시도
+if (matched === 0 && !useDirectMode && allNames.size > 0) {
+  console.log('⚠️ 매칭 0건! 수업일지 이름으로 직접 그룹핑 재시도...');
+  matched = 0; outOfRange = 0; unmatched = 0;
+  for (const page of pages) {
+    const props = page.properties || {};
+    const rawName = findName(props);
+    if (!rawName || looksLikeDate(rawName)) { unmatched++; continue; }
+    const logDate = findDate(props, page.created_time);
+    if (!inRange(logDate)) { outOfRange++; continue; }
+    matched++;
+    const finalName = rawName.trim();
+    if (!grouped[finalName]) {
+      grouped[finalName] = { student_name: finalName, reportPeriod, classPeriod, page_id: '', logs: [] };
+    }
+    const status = get_status(props);
+    const courseVal = status === '결석' ? '결석' : get_course(props);
+    grouped[finalName].logs.push({
+      date: findDate(props, page.created_time), course: courseVal,
+      textbook: get_textbook(props), content: get_content(props),
+      homework: get_homework(props), note: get_note(props)
+    });
+  }
+  console.log(\`2차 직접모드: 매칭 \${matched} / 기간외 \${outOfRange} / 미매칭 \${unmatched}\`);
+}
 
 const students = Object.values(grouped).map(s => {
   s.logs.sort((a,b) => new Date(a.date)-new Date(b.date));
@@ -619,11 +676,7 @@ if (students.length === 0) {
     _debug: true,
     student_name: '(매칭없음)',
     reportPeriod, classPeriod, page_id: '', logs: [],
-    debug_info: {
-      total_pages: pages.length,
-      studentNames,
-      all_names_in_db: [...allNames].sort()
-    }
+    debug_info: { total_pages: pages.length, studentNames, all_names_in_db: [...allNames].sort() }
   }}];
 }
 return students;`;
