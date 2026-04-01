@@ -618,9 +618,99 @@ function switchTab(name, tabEl) {
   document.getElementById('tab-' + name).classList.add('active');
 }
 
-// ── Notion 속성 자동 감지 (정적 사이트에서는 미지원) ──
-function detectProperties() {
-  showAlert('error', 'Notion 속성 자동 감지는 정적 사이트에서 지원되지 않습니다. 속성명을 직접 입력해주세요.');
+// ── API 엔드포인트 설정 ──
+const API_BASE = 'https://n8n-workflow-api.jigumdo.workers.dev';
+
+// ── Notion 속성 자동 감지 ──
+async function detectProperties() {
+  const apiKey = val('n-api-key');
+  const portfolioDbId = val('n-portfolio-db');
+  const classLogDbId = val('n-classlog-db');
+
+  if (!apiKey) { showAlert('error', 'Notion API Key를 먼저 입력해주세요.'); return; }
+  if (!classLogDbId) { showAlert('error', '수업일지 DB ID를 먼저 입력해주세요.'); return; }
+
+  const btn = event.target;
+  const origText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 감지 중...';
+  clearAlerts();
+
+  try {
+    // 수업일지 DB 속성 감지
+    const clResp = await fetch(`${API_BASE}/api/notion/detect-properties`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey, databaseId: classLogDbId }),
+    });
+    const clData = await clResp.json();
+    if (!clData.success) throw new Error(clData.error || '수업일지 DB 감지 실패');
+
+    // 포트폴리오 DB 속성 감지 (있으면)
+    let pfData = null;
+    if (portfolioDbId) {
+      const pfResp = await fetch(`${API_BASE}/api/notion/detect-properties`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey, databaseId: portfolioDbId }),
+      });
+      pfData = await pfResp.json();
+    }
+
+    // 감지된 속성 표시
+    const propsEl = document.getElementById('detected-props');
+    const clProps = Object.values(clData.properties);
+    propsEl.innerHTML = `<div style="font-size:11px;color:var(--text3);margin-bottom:8px">
+      감지된 수업일지 속성: ${clProps.map(p => `<code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:10px">${p.name} (${p.type})</code>`).join(' ')}
+    </div>`;
+    document.getElementById('detected-badge').hidden = false;
+
+    // 속성명 자동 매핑
+    const propNames = clProps.map(p => p.name);
+    const autoMap = {
+      'p-cl-name': ['이름', '학생', '이름 입력', '학생이름', '학생 이름'],
+      'p-cl-date': ['수업 날짜', '수업날짜', '날짜', 'Date', '일자'],
+      'p-cl-course': ['과정', '수업과정', '반', '과목', '코스'],
+      'p-cl-textbook': ['교재', '교재명', '텍스트북', 'textbook'],
+      'p-cl-content': ['수업내용', '수업 내용', '내용', '진도', '학습내용'],
+      'p-cl-homework': ['과제', '숙제', '과제 내용', '과제내용'],
+      'p-cl-note': ['특이사항', '개선 사항', '메모', '비고', '참고'],
+    };
+
+    let mapped = 0;
+    for (const [inputId, candidates] of Object.entries(autoMap)) {
+      const found = candidates.filter(c => propNames.includes(c));
+      if (found.length > 0) {
+        document.getElementById(inputId).value = found.join(', ');
+        mapped++;
+      }
+    }
+
+    // 포트폴리오 속성 자동 매핑
+    if (pfData?.success) {
+      const pfProps = Object.values(pfData.properties).map(p => p.name);
+      const pfMap = {
+        'p-pf-name': ['이름', '학생', '학생이름'],
+        'p-pf-url': ['url', 'URL', '링크', '보고서'],
+        'p-pf-ready': ['(준)생성', '준비', '생성준비'],
+        'p-pf-done': ['(완)생성', '완료', '생성완료'],
+      };
+      for (const [inputId, candidates] of Object.entries(pfMap)) {
+        const found = candidates.filter(c => pfProps.includes(c));
+        if (found.length > 0) {
+          document.getElementById(inputId).value = found[0];
+        }
+      }
+    }
+
+    showAlert('success', `속성 자동 감지 완료! 수업일지 ${clProps.length}개 속성 감지, ${mapped}개 자동 매핑됨.`);
+
+  } catch(e) {
+    showAlert('error', '속성 감지 실패: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origText;
+  }
 }
 
 // ── Notion 설정 저장 ──
