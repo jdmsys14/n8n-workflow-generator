@@ -249,8 +249,8 @@ return { json: {
 
         // 데이터 필드에서 로그 객체 속성 생성 코드
         const logFieldsCode = dataFields.map(f =>
-          `    ${JSON.stringify(f.name)}: getVal(props[${JSON.stringify(f.name)}])`
-        ).join(',\n');
+          `  logEntry[${JSON.stringify(f.name)}] = getVal(props[${JSON.stringify(f.name)}]);`
+        ).join('\n');
 
         return `// 이름 매칭 & 학생별 수업일지 그룹화 (v3 전면 재설계)
 const sd    = $('학생 이름 추출').first().json;
