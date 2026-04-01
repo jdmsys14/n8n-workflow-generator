@@ -289,10 +289,15 @@ function getVal(prop) {
   }
 }
 
-// 날짜 패턴 (이름이 아님)
+// 이름이 아닌 값 판별
 function looksLikeDate(s) {
   if (!s) return false;
-  return /^\\d{4}-\\d{2}-\\d{2}/.test(s) || /^\\d{4}년/.test(s) || /^\\d{2}\\.\\d{2}/.test(s);
+  if (/^\\d{4}-/.test(s)) return true;        // 2026-...
+  if (/^\\d{4}년/.test(s)) return true;       // 2026년...
+  if (/^\\d{2}\\.\\d{2}/.test(s)) return true; // 03.01...
+  if (/^\\d{4}\\d{2}/.test(s) && s.length > 6) return true; // 202603...
+  if (s.length > 15) return true;              // 너무 긴 값은 이름이 아님
+  return false;
 }
 
 function findName(props) {
@@ -358,35 +363,53 @@ const grouped = {};
 let matched = 0, outOfRange = 0, unmatched = 0;
 const allNames = new Set();
 
+// 포트폴리오 이름이 비정상인지 확인
+const validStudentNames = studentNames.filter(n => n && !looksLikeDate(n) && n !== '(매칭없음)');
+const useDirectMode = validStudentNames.length === 0; // 포트폴리오 이름 추출 실패 → 수업일지에서 직접 그룹핑
+
+if (useDirectMode) {
+  console.log('⚠️ 포트폴리오 이름 추출 실패! 수업일지에서 직접 학생 그룹핑합니다.');
+}
+
 for (const page of pages) {
   const props   = page.properties || {};
   const rawName = findName(props);
-  if (rawName) allNames.add(rawName);
+  if (!rawName) { unmatched++; continue; }
+  allNames.add(rawName);
 
-  const matchedName = rawName ? matchStudent(rawName, studentNames) : null;
-  if (!matchedName) { unmatched++; continue; }
+  let finalName;
+  if (useDirectMode) {
+    // 직접 모드: 수업일지 이름을 그대로 사용
+    finalName = rawName.trim();
+    if (looksLikeDate(finalName)) { unmatched++; continue; }
+  } else {
+    // 매칭 모드: 포트폴리오 이름과 매칭
+    finalName = matchStudent(rawName, validStudentNames);
+    if (!finalName) { unmatched++; continue; }
+  }
 
   const logDate = findDate(props, page.created_time);
   if (!inRange(logDate)) { outOfRange++; continue; }
 
   matched++;
-  if (!grouped[matchedName]) {
-    grouped[matchedName] = {
-      student_name: matchedName,
+  if (!grouped[finalName]) {
+    const mapEntry = useDirectMode ? null : studentMap[finalName];
+    grouped[finalName] = {
+      student_name: finalName,
       reportPeriod, classPeriod,
-      page_id: studentMap[matchedName] ? studentMap[matchedName].portfolio_page_id : '',
+      page_id: mapEntry ? mapEntry.portfolio_page_id : '',
       logs: [],
       fieldNames: ${JSON.stringify(dataFields.map(f => f.name))}
     };
   }
 
-  grouped[matchedName].logs.push({
+  grouped[finalName].logs.push({
     date: findDate(props, page.created_time),
 ${logFieldsCode}
   });
 }
 
-console.log(\`매칭 \${matched} / 기간외 \${outOfRange} / 미매칭 \${unmatched}\`);
+console.log(\`모드: \${useDirectMode ? '직접' : '매칭'} / 매칭 \${matched} / 기간외 \${outOfRange} / 미매칭 \${unmatched}\`);
 
 const students = Object.values(grouped).map(s => {
   s.logs.sort((a,b) => new Date(a.date)-new Date(b.date));
@@ -400,7 +423,9 @@ if (students.length === 0) {
     reportPeriod, classPeriod, page_id: '', logs: [], fieldNames: [],
     debug_info: {
       total_pages: pages.length,
-      studentNames,
+      studentNames_raw: studentNames,
+      validStudentNames,
+      useDirectMode,
       all_names_in_db: [...allNames].sort()
     }
   }}];
@@ -475,7 +500,11 @@ ${statusHelper}
 
 function looksLikeDate(s) {
   if (!s) return false;
-  return /^\\d{4}-\\d{2}-\\d{2}/.test(s) || /^\\d{4}년/.test(s) || /^\\d{2}\\.\\d{2}/.test(s);
+  if (/^\\d{4}-/.test(s)) return true;
+  if (/^\\d{4}년/.test(s)) return true;
+  if (/^\\d{2}\\.\\d{2}/.test(s)) return true;
+  if (s.length > 15) return true;
+  return false;
 }
 
 function findName(props) {
@@ -533,31 +562,42 @@ const grouped = {};
 let matched = 0, outOfRange = 0, unmatched = 0;
 const allNames = new Set();
 
+const validStudentNames = studentNames.filter(n => n && !looksLikeDate(n));
+const useDirectMode = validStudentNames.length === 0;
+if (useDirectMode) console.log('⚠️ 포트폴리오 이름 추출 실패! 수업일지에서 직접 학생 그룹핑');
+
 for (const page of pages) {
   const props   = page.properties || {};
   const rawName = findName(props);
-  if (rawName) allNames.add(rawName);
+  if (!rawName) { unmatched++; continue; }
+  allNames.add(rawName);
 
-  const matchedName = rawName ? matchStudent(rawName, studentNames) : null;
-  if (!matchedName) { unmatched++; continue; }
+  let finalName;
+  if (useDirectMode) {
+    finalName = rawName.trim();
+    if (looksLikeDate(finalName)) { unmatched++; continue; }
+  } else {
+    finalName = matchStudent(rawName, validStudentNames);
+    if (!finalName) { unmatched++; continue; }
+  }
 
   const logDate = findDate(props, page.created_time);
   if (!inRange(logDate)) { outOfRange++; continue; }
 
   matched++;
-  if (!grouped[matchedName]) {
-    const pid = studentMap[matchedName] ? studentMap[matchedName].portfolio_page_id : '';
-    grouped[matchedName] = {
-      student_name: matchedName,
+  if (!grouped[finalName]) {
+    const mapEntry = useDirectMode ? null : studentMap[finalName];
+    grouped[finalName] = {
+      student_name: finalName,
       reportPeriod, classPeriod,
-      page_id: pid,
+      page_id: mapEntry ? mapEntry.portfolio_page_id : '',
       logs: []
     };
   }
 
   const status = get_status(props);
   const courseVal = status === '결석' ? '결석' : get_course(props);
-  grouped[matchedName].logs.push({
+  grouped[finalName].logs.push({
     date:     findDate(props, page.created_time),
     course:   courseVal,
     textbook: get_textbook(props),
@@ -567,7 +607,7 @@ for (const page of pages) {
   });
 }
 
-console.log(\`매칭 \${matched} / 기간외 \${outOfRange} / 미매칭 \${unmatched}\`);
+console.log(\`모드: \${useDirectMode ? '직접' : '매칭'} / 매칭 \${matched} / 기간외 \${outOfRange} / 미매칭 \${unmatched}\`);
 
 const students = Object.values(grouped).map(s => {
   s.logs.sort((a,b) => new Date(a.date)-new Date(b.date));
