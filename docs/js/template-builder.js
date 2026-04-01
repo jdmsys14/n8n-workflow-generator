@@ -241,6 +241,8 @@ return { json: {
         const nameField = dynamicFields.find(f => f.role === 'studentName');
         const dateField = dynamicFields.find(f => f.role === 'date');
         const dataFields = dynamicFields.filter(f => f.role === 'data');
+        // 전체 필드 이름 목록 (디버그용)
+        const allFieldNames = dynamicFields.map(f => f.name);
 
         const nameFieldName = nameField?.name || '이름';
         const dateFieldName = dateField?.name || '날짜';
@@ -250,7 +252,7 @@ return { json: {
           `    ${JSON.stringify(f.name)}: getVal(props[${JSON.stringify(f.name)}])`
         ).join(',\n');
 
-        return `// 이름 매칭 & 학생별 수업일지 그룹화 (동적 필드)
+        return `// 이름 매칭 & 학생별 수업일지 그룹화 (v3 전면 재설계)
 const sd    = $('학생 이름 추출').first().json;
 const input = $input.first().json;
 const pages = input.results || [];
@@ -258,215 +260,261 @@ const pages = input.results || [];
 const { studentNames = [], studentMap = {}, reportPeriod = '', classPeriod = '',
         lastMonthStart = '', lastMonthEnd = '' } = sd;
 
+// ═══ 값 추출 함수 (모든 Notion 속성 타입 지원) ═══
 function getVal(prop) {
   if (!prop) return '';
-  switch (prop.type) {
-    case 'title':     return prop.title?.[0]?.plain_text     || '';
-    case 'rich_text': return prop.rich_text?.[0]?.plain_text || '';
-    case 'select':    return prop.select?.name               || '';
-    case 'multi_select': return (prop.multi_select || []).map(s => s.name).join(', ') || '';
-    case 'date':      return prop.date?.start                || '';
-    case 'number':    return prop.number != null ? String(prop.number) : '';
-    case 'checkbox':  return prop.checkbox ? '✅' : '';
-    case 'status':    return prop.status?.name || '';
-    case 'url':       return prop.url || '';
-    case 'email':     return prop.email || '';
-    case 'phone_number': return prop.phone_number || '';
-    case 'created_time': return (prop.created_time || '').split('T')[0];
-    case 'formula': {
-      const f = prop.formula;
-      if (!f) return '';
-      if (f.type === 'string') return f.string || '';
-      if (typeof f.string !== 'undefined') return f.string || '';
-      if (f.type === 'number') return f.number != null ? String(f.number) : '';
-      if (f.type === 'date')   return f.date?.start || '';
-      if (f.type === 'boolean') return f.boolean ? '✅' : '';
-      return '';
-    }
-    case 'rollup': {
-      const arr = prop.rollup?.array;
-      if (!arr || arr.length === 0) return '';
-      const first = arr[0];
-      if (first.type === 'select' && first.select) return first.select.name || '';
-      if (first.type === 'formula' && first.formula) {
-        if (first.formula.type === 'string') return first.formula.string || '';
-      }
-      return '';
-    }
-    case 'relation': return (prop.relation || []).map(r => r.id).join(', ') || '';
-    default: return '';
+  var t = prop.type;
+  if (t === 'title')       return (prop.title && prop.title[0]) ? prop.title[0].plain_text : '';
+  if (t === 'rich_text')   return (prop.rich_text && prop.rich_text[0]) ? prop.rich_text[0].plain_text : '';
+  if (t === 'select')      return prop.select ? (prop.select.name || '') : '';
+  if (t === 'multi_select') return (prop.multi_select || []).map(function(s){ return s.name; }).join(', ');
+  if (t === 'date')        return prop.date ? (prop.date.start || '') : '';
+  if (t === 'number')      return prop.number != null ? String(prop.number) : '';
+  if (t === 'checkbox')    return prop.checkbox ? 'Y' : 'N';
+  if (t === 'status')      return prop.status ? (prop.status.name || '') : '';
+  if (t === 'url')         return prop.url || '';
+  if (t === 'email')       return prop.email || '';
+  if (t === 'phone_number') return prop.phone_number || '';
+  if (t === 'created_time') return (prop.created_time || '').split('T')[0];
+  if (t === 'last_edited_time') return (prop.last_edited_time || '').split('T')[0];
+  if (t === 'formula') {
+    var f = prop.formula;
+    if (!f) return '';
+    if (f.type === 'string')  return f.string || '';
+    if (f.type === 'number')  return f.number != null ? String(f.number) : '';
+    if (f.type === 'date')    return f.date ? (f.date.start || '') : '';
+    if (f.type === 'boolean') return f.boolean ? 'Y' : 'N';
+    if (typeof f.string !== 'undefined') return f.string || '';
+    return '';
   }
+  if (t === 'rollup') {
+    var arr = prop.rollup ? prop.rollup.array : null;
+    if (!arr || arr.length === 0) return '';
+    return arr.map(function(item) {
+      if (item.type === 'title' && item.title && item.title[0]) return item.title[0].plain_text;
+      if (item.type === 'rich_text' && item.rich_text && item.rich_text[0]) return item.rich_text[0].plain_text;
+      if (item.type === 'select' && item.select) return item.select.name;
+      if (item.type === 'formula' && item.formula) return item.formula.string || '';
+      return '';
+    }).filter(Boolean).join(', ');
+  }
+  if (t === 'relation') return ''; // relation은 ID만 반환 → 이름 추출 불가, 스킵
+  return '';
 }
 
-// 이름이 아닌 값 판별
+// ═══ 이름 판별 ═══
 function looksLikeDate(s) {
-  if (!s) return false;
-  if (/^\\d{4}-/.test(s)) return true;        // 2026-...
-  if (/^\\d{4}년/.test(s)) return true;       // 2026년...
-  if (/^\\d{2}\\.\\d{2}/.test(s)) return true; // 03.01...
-  if (/^\\d{4}\\d{2}/.test(s) && s.length > 6) return true; // 202603...
-  if (s.length > 15) return true;              // 너무 긴 값은 이름이 아님
+  if (!s) return true;
+  s = s.trim();
+  if (s.length === 0) return true;
+  if (/^\\d{4}[-.\\/]/.test(s)) return true;
+  if (/^\\d{4}년/.test(s)) return true;
+  if (/^\\d{1,2}월\\s*\\d{1,2}일/.test(s)) return true;
+  if (s.length > 20) return true;
+  // UUID 패턴 (relation ID)
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}/.test(s)) return true;
   return false;
 }
 
-function findName(props) {
-  // 1) 지정된 필드에서 추출
-  const v = getVal(props[${JSON.stringify(nameFieldName)}]);
-  if (v && !looksLikeDate(v)) return v.trim();
+function isValidName(s) {
+  return s && s.trim().length > 0 && s.trim().length <= 20 && !looksLikeDate(s);
+}
 
-  // 2) 'F이름', '이름' 등 이름 관련 필드 우선 탐색 (formula 우선)
-  const nameKeys = Object.entries(props)
-    .filter(([k]) => k.includes('이름') || k.includes('name') || k.includes('Name'))
-    .sort((a, b) => {
-      // formula > rich_text > title > 나머지 순으로 우선
-      const order = { formula: 0, rich_text: 1, title: 2 };
-      const oa = order[a[1].type] !== undefined ? order[a[1].type] : 9;
-      const ob = order[b[1].type] !== undefined ? order[b[1].type] : 9;
-      return oa - ob;
-    });
-  for (const [key, val] of nameKeys) {
-    const r = getVal(val);
-    if (r && !looksLikeDate(r)) return r.trim();
+// ═══ 학생 이름 추출 (핵심 - relation 감지 + formula 우선) ═══
+function findName(props) {
+  // 1) 지정된 필드
+  var specified = props[${JSON.stringify(nameFieldName)}];
+  if (specified) {
+    // relation이면 스킵 (ID만 반환되므로)
+    if (specified.type !== 'relation') {
+      var v = getVal(specified);
+      if (isValidName(v)) return v.trim();
+    }
   }
 
-  // 3) title 타입 fallback (날짜 아닌 것만)
-  for (const val of Object.values(props)) {
-    if (val.type === 'title' && val.title?.[0]?.plain_text) {
-      const t = val.title[0].plain_text.trim();
-      if (t && !looksLikeDate(t)) return t;
+  // 2) 이름 관련 필드 탐색: formula 최우선
+  var nameEntries = [];
+  for (var key in props) {
+    if (key.indexOf('이름') !== -1 || key.indexOf('name') !== -1 || key.indexOf('Name') !== -1) {
+      nameEntries.push([key, props[key]]);
+    }
+  }
+  // formula > rich_text > title > select 순 정렬
+  nameEntries.sort(function(a, b) {
+    var order = { formula: 0, rich_text: 1, title: 2, select: 3 };
+    var oa = order[a[1].type] !== undefined ? order[a[1].type] : 9;
+    var ob = order[b[1].type] !== undefined ? order[b[1].type] : 9;
+    return oa - ob;
+  });
+  for (var i = 0; i < nameEntries.length; i++) {
+    if (nameEntries[i][1].type === 'relation') continue; // relation 스킵
+    var r = getVal(nameEntries[i][1]);
+    if (isValidName(r)) return r.trim();
+  }
+
+  // 3) title 타입 fallback
+  for (var key2 in props) {
+    var val = props[key2];
+    if (val.type === 'title' && val.title && val.title[0] && val.title[0].plain_text) {
+      var t = val.title[0].plain_text.trim();
+      if (isValidName(t)) return t;
     }
   }
   return '';
 }
 
+// ═══ 날짜 추출 (느슨한 필터링) ═══
 function findDate(props, createdTime) {
-  const p = props[${JSON.stringify(dateFieldName)}];
-  if (p?.date?.start) return p.date.start;
-  if (p?.created_time) return p.created_time.split('T')[0];
-  const v = getVal(p);
-  if (v && v.match(/\\d{4}-\\d{2}-\\d{2}/)) return v;
+  // 1) 지정된 날짜 필드
+  var dp = props[${JSON.stringify(dateFieldName)}];
+  if (dp) {
+    if (dp.date && dp.date.start) return dp.date.start;
+    if (dp.type === 'formula' && dp.formula) {
+      if (dp.formula.type === 'date' && dp.formula.date) return dp.formula.date.start || '';
+      if (dp.formula.type === 'string' && dp.formula.string) {
+        var m = dp.formula.string.match(/\\d{4}-\\d{2}-\\d{2}/);
+        if (m) return m[0];
+      }
+    }
+    var dv = getVal(dp);
+    if (dv) {
+      var dm = dv.match(/\\d{4}-\\d{2}-\\d{2}/);
+      if (dm) return dm[0];
+    }
+  }
+
+  // 2) 'date' 타입인 다른 필드 탐색
+  for (var key in props) {
+    if (props[key].type === 'date' && props[key].date && props[key].date.start) {
+      return props[key].date.start;
+    }
+  }
+
+  // 3) created_time fallback
   return (createdTime || '').split('T')[0];
 }
 
+// ═══ 날짜 범위 체크 (느슨하게 - 못 찾으면 포함) ═══
 function inRange(dateStr) {
   if (!dateStr || !lastMonthStart || !lastMonthEnd) return true;
-  return dateStr >= lastMonthStart && dateStr <= lastMonthEnd;
+  var d = dateStr.slice(0, 10); // YYYY-MM-DD
+  if (d.length < 10) return true; // 날짜 형식 불완전 → 포함
+  return d >= lastMonthStart && d <= lastMonthEnd;
 }
 
 function normalize(s) { return (s || '').trim().replace(/\\s+/g, ''); }
 
 function matchStudent(rawName, studentNames) {
-  const names = rawName.split(/[,，、\\/]/).map(n => normalize(n)).filter(Boolean);
-  for (const n of names) {
-    // 1) 정규화 후 정확 매칭
-    const exact = studentNames.find(s => normalize(s) === n);
-    if (exact) return exact;
-    // 2) 부분 매칭 (포함 관계)
-    const partial = studentNames.find(s => n.includes(normalize(s)) || normalize(s).includes(n));
-    if (partial) return partial;
+  var names = rawName.split(/[,，、\\/]/).map(function(n){ return normalize(n); }).filter(Boolean);
+  for (var i = 0; i < names.length; i++) {
+    var n = names[i];
+    // 정확 매칭
+    for (var j = 0; j < studentNames.length; j++) {
+      if (normalize(studentNames[j]) === n) return studentNames[j];
+    }
+    // 부분 매칭
+    for (var j2 = 0; j2 < studentNames.length; j2++) {
+      var ns = normalize(studentNames[j2]);
+      if (n.indexOf(ns) !== -1 || ns.indexOf(n) !== -1) return studentNames[j2];
+    }
   }
   return null;
 }
 
-const grouped = {};
-let matched = 0, outOfRange = 0, unmatched = 0;
-const allNames = new Set();
+// ═══ 메인 그룹화 로직 ═══
+var grouped = {};
+var matched = 0, outOfRange = 0, unmatched = 0, nameNotFound = 0;
+var allNames = new Set();
 
-// 포트폴리오 이름이 비정상인지 확인
-const validStudentNames = studentNames.filter(n => n && !looksLikeDate(n) && n !== '(매칭없음)');
-const useDirectMode = validStudentNames.length === 0; // 포트폴리오 이름 추출 실패 → 수업일지에서 직접 그룹핑
+var validStudentNames = studentNames.filter(function(n){ return isValidName(n); });
+console.log('포트폴리오 학생: ' + validStudentNames.join(', ') + ' (' + validStudentNames.length + '명)');
 
-if (useDirectMode) {
-  console.log('⚠️ 포트폴리오 이름 추출 실패! 수업일지에서 직접 학생 그룹핑합니다.');
-}
+// 1차: 모든 수업일지 순회
+for (var pi = 0; pi < pages.length; pi++) {
+  var page = pages[pi];
+  var props = page.properties || {};
+  var rawName = findName(props);
 
-for (const page of pages) {
-  const props   = page.properties || {};
-  const rawName = findName(props);
-  if (!rawName) { unmatched++; continue; }
+  if (!rawName) { nameNotFound++; continue; }
   allNames.add(rawName);
 
-  let finalName;
-  if (useDirectMode) {
-    // 직접 모드: 수업일지 이름을 그대로 사용
-    finalName = rawName.trim();
-    if (looksLikeDate(finalName)) { unmatched++; continue; }
-  } else {
-    // 매칭 모드: 포트폴리오 이름과 매칭
+  // 매칭 시도
+  var finalName = null;
+  if (validStudentNames.length > 0) {
     finalName = matchStudent(rawName, validStudentNames);
-    if (!finalName) { unmatched++; continue; }
+  }
+  // 매칭 실패 시 수업일지 이름 직접 사용
+  if (!finalName) {
+    if (isValidName(rawName)) {
+      finalName = rawName.trim();
+    } else {
+      unmatched++;
+      continue;
+    }
   }
 
-  const logDate = findDate(props, page.created_time);
+  var logDate = findDate(props, page.created_time);
   if (!inRange(logDate)) { outOfRange++; continue; }
 
   matched++;
   if (!grouped[finalName]) {
-    const mapEntry = useDirectMode ? null : studentMap[finalName];
+    var mapEntry = studentMap[finalName] || studentMap[normalize(finalName)] || null;
     grouped[finalName] = {
       student_name: finalName,
-      reportPeriod, classPeriod,
+      reportPeriod: reportPeriod,
+      classPeriod: classPeriod,
       page_id: mapEntry ? mapEntry.portfolio_page_id : '',
       logs: [],
       fieldNames: ${JSON.stringify(dataFields.map(f => f.name))}
     };
   }
 
-  grouped[finalName].logs.push({
-    date: findDate(props, page.created_time),
-${logFieldsCode}
-  });
+  var logEntry = { date: logDate };
+${logFieldsCode.split('\n').map(line => '  ' + line).join('\n')}
+  grouped[finalName].logs.push(logEntry);
 }
 
-console.log(\`1차 모드: \${useDirectMode ? '직접' : '매칭'} / 매칭 \${matched} / 기간외 \${outOfRange} / 미매칭 \${unmatched}\`);
+console.log('결과: 매칭 ' + matched + ' / 기간외 ' + outOfRange + ' / 이름없음 ' + nameNotFound + ' / 미매칭 ' + unmatched);
+console.log('수업일지 이름 목록: ' + [...allNames].sort().join(', '));
 
-// ★ 매칭 모드에서 결과 0건이면 → 자동으로 직접 모드로 재시도
-if (matched === 0 && !useDirectMode && allNames.size > 0) {
-  console.log('⚠️ 매칭 0건! 수업일지 이름으로 직접 그룹핑 재시도...');
-  matched = 0; outOfRange = 0; unmatched = 0;
+// 포트폴리오에 있는 학생만 필터링 (포트폴리오 이름이 유효한 경우)
+var students;
+if (validStudentNames.length > 0) {
+  // 포트폴리오 학생만 출력 (매칭된 것만)
+  students = validStudentNames
+    .filter(function(name) { return grouped[name] && grouped[name].logs.length > 0; })
+    .map(function(name) {
+      var s = grouped[name];
+      s.logs.sort(function(a,b) { return new Date(a.date) - new Date(b.date); });
+      return { json: s };
+    });
 
-  for (const page of pages) {
-    const props = page.properties || {};
-    const rawName = findName(props);
-    if (!rawName || looksLikeDate(rawName)) { unmatched++; continue; }
-
-    const logDate = findDate(props, page.created_time);
-    if (!inRange(logDate)) { outOfRange++; continue; }
-
-    matched++;
-    const finalName = rawName.trim();
-    if (!grouped[finalName]) {
-      grouped[finalName] = {
-        student_name: finalName,
-        reportPeriod, classPeriod,
-        page_id: '',
-        logs: [],
-        fieldNames: ${JSON.stringify(dataFields.map(f => f.name))}
-      };
-    }
-    grouped[finalName].logs.push({
-      date: findDate(props, page.created_time),
-${logFieldsCode}
+  // 포트폴리오 매칭이 0건이면 전체 출력
+  if (students.length === 0) {
+    console.log('포트폴리오 매칭 0건 → 수업일지 전체 학생 출력');
+    students = Object.values(grouped).map(function(s) {
+      s.logs.sort(function(a,b) { return new Date(a.date) - new Date(b.date); });
+      return { json: s };
     });
   }
-  console.log(\`2차 직접모드: 매칭 \${matched} / 기간외 \${outOfRange} / 미매칭 \${unmatched}\`);
+} else {
+  students = Object.values(grouped).map(function(s) {
+    s.logs.sort(function(a,b) { return new Date(a.date) - new Date(b.date); });
+    return { json: s };
+  });
 }
-
-const students = Object.values(grouped).map(s => {
-  s.logs.sort((a,b) => new Date(a.date)-new Date(b.date));
-  return { json: s };
-});
 
 if (students.length === 0) {
   return [{ json: {
     _debug: true,
     student_name: '(매칭없음)',
-    reportPeriod, classPeriod, page_id: '', logs: [], fieldNames: [],
+    reportPeriod: reportPeriod, classPeriod: classPeriod, page_id: '', logs: [], fieldNames: [],
     debug_info: {
       total_pages: pages.length,
       studentNames_raw: studentNames,
-      validStudentNames,
-      all_names_in_db: [...allNames].sort()
+      validStudentNames: validStudentNames,
+      all_names_in_db: [...allNames].sort(),
+      nameNotFound: nameNotFound
     }
   }}];
 }
