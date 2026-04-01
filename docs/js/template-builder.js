@@ -165,6 +165,15 @@ function looksLikeDate(s) {
 
 for (const item of items) {
   const props = item.json.properties;
+
+  // (준)생성 체크박스 코드 레벨 검증
+  const readyProp = findProp(props, ${JSON.stringify(prop.portfolio.readyCheckbox)});
+  if (readyProp && readyProp.checkbox === false) continue;
+
+  // (완)생성 이미 완료된 학생은 스킵
+  const doneProp = findProp(props, ${JSON.stringify(prop.portfolio.doneCheckbox)});
+  if (doneProp && doneProp.checkbox === true) continue;
+
   let name = '';
 
   // 1) 지정된 이름 필드에서 추출 (이모지 포함 퍼지 매칭)
@@ -1500,7 +1509,7 @@ return { json: {
           returnAll: true, simple: false, filterType: 'manual', matchType: 'allFilters',
           filters: { conditions: [
             { key: `${prop.portfolio.readyCheckbox}|checkbox`, condition: 'equals', checkboxValue: true },
-            { key: `${prop.portfolio.urlField}|url`, condition: 'is_empty' }
+            { key: `${prop.portfolio.doneCheckbox}|checkbox`, condition: 'equals', checkboxValue: false }
           ] },
           options: {}
         },
