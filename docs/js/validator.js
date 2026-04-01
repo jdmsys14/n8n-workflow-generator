@@ -54,7 +54,14 @@
     if (!props.portfolio?.name) {
       errors.push(new ValidationError('error', null, 'properties.portfolio.name이 비어있습니다.'));
     }
-    if (!props.classLog?.studentName?.length) {
+    // 동적 필드 모드 또는 레거시 모드 둘 다 허용
+    const cl = props.classLog;
+    if (cl?.fields) {
+      // 동적 모드: fields 배열에 studentName 역할이 있는지 확인
+      if (!cl.fields.some(f => f.role === 'studentName')) {
+        errors.push(new ValidationError('error', null, '수업일지 학생 이름 역할이 지정되지 않았습니다.'));
+      }
+    } else if (!cl?.studentName?.length) {
       errors.push(new ValidationError('error', null, 'properties.classLog.studentName이 비어있습니다.'));
     }
 
