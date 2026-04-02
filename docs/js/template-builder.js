@@ -43,23 +43,29 @@
     // dynamicFields가 있으면: [{name, type, role}] 형태
     // role: 'studentName' | 'date' | 'data'
 
+    // 조회 모드
+    const queryMode = notion.queryMode || 'relation';
+    const studentRelationProp = notion.studentRelationProp || '✅학생입력';
+    const portfolioStudentRelation = notion.portfolioStudentRelation || '';
+
     const ids = {
-      trigger:      uuid(),
-      dateCalc:     uuid(),
-      portfolio:    uuid(),
-      extractNames: uuid(),
-      classLogQuery:uuid(),
-      groupMatch:   uuid(),
-      loop:         uuid(),
-      apiBody:      uuid(),
-      claudeCall:   uuid(),
-      htmlGen:      uuid(),
-      githubCheck:  uuid(),
-      githubBody:   uuid(),
-      githubUpload: uuid(),
-      done:         uuid(),
-      pageIdCheck:  uuid(),
-      notionUpdate: uuid(),
+      trigger:         uuid(),
+      dateCalc:        uuid(),
+      portfolio:       uuid(),
+      studentExtract:  uuid(),
+      loop:            uuid(),
+      classLogBodyPrep:uuid(),
+      classLogQuery:   uuid(),
+      dataAggregate:   uuid(),
+      apiBody:         uuid(),
+      claudeCall:      uuid(),
+      htmlGen:         uuid(),
+      githubCheck:     uuid(),
+      githubBody:      uuid(),
+      githubUpload:    uuid(),
+      done:            uuid(),
+      pageIdCheck:     uuid(),
+      notionUpdate:    uuid(),
     };
 
     function buildDateCalcCode() {
@@ -83,206 +89,261 @@ const reportPeriod   = \`\${thisYear}년 \${pad(thisMonth)}월\`;
 return { json: { lastMonthStart, lastMonthEnd, reportPeriod, classPeriod, lastYear, lastMonth, thisYear, thisMonth } };`;
     }
 
-    function buildExtractNamesCode() {
-      const nameField = prop.portfolio.name;
-      return `// 학생 이름 목록 추출
-const dateInfo = $('날짜 계산').first().json;
-const studentNames = [];
-const studentMap = {};
+    // ═══════════════════════════════════════════════════════
+    // v4 파이프라인: 3개 핵심 함수
+    // ═══════════════════════════════════════════════════════
 
+    function buildStudentExtractCode() {
+      const nameField = prop.portfolio.name;
+
+      // Build the relation extraction code based on config
+      let relationCode = '';
+      if (queryMode === 'relation') {
+        if (portfolioStudentRelation) {
+          relationCode = `var relProp = findProp(props, ${JSON.stringify(portfolioStudentRelation)});
+  if (relProp && relProp.type === 'relation' && relProp.relation && relProp.relation.length > 0) {
+    student_list_page_id = relProp.relation[0].id || '';
+  }`;
+        } else {
+          // Auto-find first relation field
+          relationCode = `for (var rk in props) {
+    if (props[rk].type === 'relation' && props[rk].relation && props[rk].relation.length > 0) {
+      student_list_page_id = props[rk].relation[0].id || '';
+      break;
+    }
+  }`;
+        }
+      }
+
+      const code = `// 학생 목록 추출 (v4)
+const dateInfo = $('날짜 계산').first().json;
+var students = [];
+
+// getVal: Notion 속성값 추출
 function getVal(prop) {
   if (!prop) return '';
-  switch (prop.type) {
-    case 'title':       return prop.title?.[0]?.plain_text || '';
-    case 'rich_text':   return prop.rich_text?.[0]?.plain_text || '';
-    case 'select':      return prop.select?.name || '';
-    case 'multi_select': return (prop.multi_select || []).map(s => s.name).join(', ') || '';
-    case 'number':      return prop.number != null ? String(prop.number) : '';
-    case 'date':        return prop.date?.start || '';
-    case 'checkbox':    return prop.checkbox ? '✅' : '';
-    case 'status':      return prop.status?.name || '';
-    case 'url':         return prop.url || '';
-    case 'email':       return prop.email || '';
-    case 'phone_number': return prop.phone_number || '';
-    case 'created_time': return (prop.created_time || '').split('T')[0];
-    case 'formula': {
-      const f = prop.formula;
-      if (!f) return '';
-      if (f.type === 'string')  return f.string || '';
-      if (f.type === 'number')  return f.number != null ? String(f.number) : '';
-      if (f.type === 'boolean') return f.boolean ? 'true' : 'false';
-      if (f.type === 'date')    return f.date?.start || '';
-      if (typeof f.string !== 'undefined') return f.string || '';
-      return '';
-    }
-    case 'rollup': {
-      const arr = prop.rollup?.array;
-      if (!arr || arr.length === 0) return '';
-      return arr.map(item => {
-        if (item.type === 'title')     return item.title?.[0]?.plain_text || '';
-        if (item.type === 'rich_text') return item.rich_text?.[0]?.plain_text || '';
-        if (item.type === 'select')    return item.select?.name || '';
-        if (item.type === 'formula')   return item.formula?.string || '';
-        return '';
-      }).filter(Boolean).join(', ') || '';
-    }
-    case 'relation': return ''; // relation은 ID만 있어서 이름 추출 불가
-    default: return '';
+  var t = prop.type;
+  if (t === 'title') return (prop.title && prop.title[0]) ? prop.title[0].plain_text : '';
+  if (t === 'rich_text') return (prop.rich_text && prop.rich_text[0]) ? prop.rich_text[0].plain_text : '';
+  if (t === 'select') return prop.select ? (prop.select.name || '') : '';
+  if (t === 'formula') {
+    var f = prop.formula;
+    if (!f) return '';
+    if (f.type === 'string') return f.string || '';
+    if (typeof f.string !== 'undefined') return f.string || '';
+    if (f.type === 'number') return f.number != null ? String(f.number) : '';
+    if (f.type === 'date') return f.date ? (f.date.start || '') : '';
+    return '';
   }
+  if (t === 'date') return prop.date ? (prop.date.start || '') : '';
+  if (t === 'status') return prop.status ? (prop.status.name || '') : '';
+  return '';
 }
 
-// 이름 정규화: 공백, 특수문자 정리
-function normalizeName(n) {
-  return (n || '').trim().replace(/\\s+/g, '');
-}
+function stripEmoji(s) { return (s || '').replace(/[\\u{1F000}-\\u{1FFFF}]/gu, '').replace(/[\\uFE0F\\u200D]/g, '').trim(); }
 
-// 이모지 제거 함수 (속성명 매칭용)
-function stripEmoji(s) {
-  return (s || '').replace(/[\\u{1F000}-\\u{1FFFF}]|[\\u{2600}-\\u{27BF}]|[\\u{FE00}-\\u{FEFF}]|[\\u{1F900}-\\u{1F9FF}]|[\\u{200D}]|[\\u{20E3}]|[\\u{E0020}-\\u{E007F}]|[\\uFE0F]|🅰️|🅱️|Ⓜ️|🅾️|🅿️|🆎|🆑-🆚|🈁|🈂️|🈚|🈯|🈲-🈺|🉐|🉑/gu, '').trim();
-}
-
-// 속성명 퍼지 매칭: 정확 매칭 → 이모지 제거 후 매칭 → 포함 매칭
-function findProp(props, targetName) {
-  // 1) 정확 매칭
-  if (props[targetName]) return props[targetName];
-  // 2) 이모지 제거 후 매칭
-  const stripped = stripEmoji(targetName);
-  for (const [key, val] of Object.entries(props)) {
-    if (stripEmoji(key) === stripped) return val;
-  }
-  // 3) 포함 매칭 (이름 → 🅰️이름 매칭)
-  for (const [key, val] of Object.entries(props)) {
-    if (stripEmoji(key).includes(stripped) || stripped.includes(stripEmoji(key))) return val;
+function findProp(props, target) {
+  if (props[target]) return props[target];
+  var stripped = stripEmoji(target);
+  for (var key in props) {
+    if (stripEmoji(key) === stripped) return props[key];
+    if (stripEmoji(key).indexOf(stripped) !== -1) return props[key];
   }
   return null;
 }
 
-// 날짜 패턴 체크
 function looksLikeDate(s) {
-  if (!s) return false;
-  return /^\\d{4}-\\d{2}/.test(s) || /^\\d{4}년/.test(s) || /^\\d{4}-\\d/.test(s);
+  if (!s) return true;
+  if (s.length > 20) return true;
+  if (/^\\d{4}[-\\/]/.test(s)) return true;
+  if (/^[0-9a-f]{8}-/.test(s)) return true;
+  return false;
 }
 
-for (const item of items) {
-  const props = item.json.properties;
+for (var i = 0; i < items.length; i++) {
+  var props = items[i].json.properties;
+  if (!props) continue;
 
-  // (준)생성 체크박스 코드 레벨 검증
-  const readyProp = findProp(props, ${JSON.stringify(prop.portfolio.readyCheckbox)});
+  // (준)생성 체크
+  var readyProp = findProp(props, ${JSON.stringify(prop.portfolio.readyCheckbox)});
   if (readyProp && readyProp.checkbox === false) continue;
-
-  // (완)생성 이미 완료된 학생은 스킵
-  const doneProp = findProp(props, ${JSON.stringify(prop.portfolio.doneCheckbox)});
+  // (완)생성 체크
+  var doneProp = findProp(props, ${JSON.stringify(prop.portfolio.doneCheckbox)});
   if (doneProp && doneProp.checkbox === true) continue;
 
-  let name = '';
-
-  // 1) 지정된 이름 필드에서 추출 (이모지 포함 퍼지 매칭)
-  const nameProp = findProp(props, ${JSON.stringify(nameField)});
-  if (nameProp) name = getVal(nameProp);
-
-  // 2) 실패 시 이름 관련 필드 탐색 (formula 우선)
+  // 이름 추출
+  var name = '';
+  var nameProp = findProp(props, ${JSON.stringify(nameField)});
+  if (nameProp && nameProp.type !== 'relation') name = getVal(nameProp);
   if (!name || looksLikeDate(name)) {
-    const nameEntries = Object.entries(props)
-      .filter(([k]) => {
-        const sk = stripEmoji(k);
-        return sk.includes('이름') || sk.includes('name') || sk.includes('Name');
-      })
-      .sort((a, b) => {
-        const order = { formula: 0, rich_text: 1, title: 2 };
-        const oa = order[a[1].type] !== undefined ? order[a[1].type] : 9;
-        const ob = order[b[1].type] !== undefined ? order[b[1].type] : 9;
-        return oa - ob;
-      });
-    for (const [key, val] of nameEntries) {
-      const v = getVal(val);
+    // formula > rich_text > title 순으로 이름 필드 탐색
+    var nameEntries = [];
+    for (var key in props) {
+      if (stripEmoji(key).indexOf('이름') !== -1 || key.indexOf('name') !== -1) {
+        if (props[key].type !== 'relation') nameEntries.push([key, props[key]]);
+      }
+    }
+    nameEntries.sort(function(a,b) {
+      var order = {formula:0, rich_text:1, title:2};
+      return (order[a[1].type]||9) - (order[b[1].type]||9);
+    });
+    for (var j = 0; j < nameEntries.length; j++) {
+      var v = getVal(nameEntries[j][1]);
       if (v && !looksLikeDate(v)) { name = v; break; }
     }
   }
-
-  // 3) 실패 시 title 타입 fallback (날짜 제외)
   if (!name || looksLikeDate(name)) {
-    for (const [key, val] of Object.entries(props)) {
-      if (val.type === 'title' && val.title?.[0]?.plain_text) {
-        const t = val.title[0].plain_text.trim();
-        if (t && !looksLikeDate(t)) { name = t; break; }
+    for (var key2 in props) {
+      if (props[key2].type === 'title' && props[key2].title && props[key2].title[0]) {
+        var t = props[key2].title[0].plain_text;
+        if (t && !looksLikeDate(t.trim())) { name = t.trim(); break; }
       }
     }
   }
+  name = (name || '').trim().replace(/\\s+/g, ' ');
+  if (!name || looksLikeDate(name)) continue;
 
-  name = normalizeName(name);
-  if (name && !looksLikeDate(name)) {
-    studentNames.push(name);
-    studentMap[name] = { portfolio_page_id: item.json.id, name };
-  }
+  // student_list page_id 추출 (relation 모드용)
+  var student_list_page_id = '';
+  ${relationCode}
+
+  students.push({
+    json: {
+      student_name: name,
+      portfolio_page_id: items[i].json.id || '',
+      student_list_page_id: student_list_page_id,
+      reportPeriod: dateInfo.reportPeriod,
+      classPeriod: dateInfo.classPeriod,
+      lastMonthStart: dateInfo.lastMonthStart,
+      lastMonthEnd: dateInfo.lastMonthEnd
+    }
+  });
 }
 
-console.log(\`대상 학생 \${studentNames.length}명: \${studentNames.join(', ')}\`);
-if (studentNames.length === 0) {
-  console.log('⚠️ 학생이름 추출 실패!');
-  const sampleProps = items[0]?.json?.properties;
-  if (sampleProps) {
-    console.log('속성 목록:', Object.entries(sampleProps).map(([k,v]) => k + '(' + v.type + ')=' + getVal(v).slice(0,20)).join(', '));
+console.log('대상 학생 ' + students.length + '명: ' + students.map(function(s){return s.json.student_name;}).join(', '));
+if (students.length === 0) {
+  console.log('⚠️ 학생 추출 실패!');
+  if (items[0] && items[0].json && items[0].json.properties) {
+    console.log('속성:', Object.keys(items[0].json.properties).join(', '));
   }
+  return [{ json: { _empty: true, error: '대상 학생이 없습니다' } }];
+}
+return students;`;
+
+      return code;
+    }
+
+    function buildClassLogBodyPrepCode() {
+      const dateFieldName = dynamicFields ? (dynamicFields.find(function(f) { return f.role === 'date'; })?.name || '날짜') : (prop.classLog?.date?.[0] || '날짜');
+
+      // relation mode: filter by student_list_page_id
+      // name mode: no filter (get all, filter in JS later)
+      if (queryMode === 'relation') {
+        return `// 수업일지 조회 Body 준비 (relation 모드)
+var s = $input.item.json;
+var body = { page_size: 100 };
+
+if (s.student_list_page_id) {
+  body.filter = {
+    property: ${JSON.stringify(studentRelationProp)},
+    relation: { contains: s.student_list_page_id }
+  };
 }
 
 return { json: {
-  studentNames,
-  studentMap,
-  reportPeriod:   dateInfo.reportPeriod,
-  classPeriod:    dateInfo.classPeriod,
-  lastMonthStart: dateInfo.lastMonthStart,
-  lastMonthEnd:   dateInfo.lastMonthEnd
+  requestBody: JSON.stringify(body),
+  student_name: s.student_name,
+  portfolio_page_id: s.portfolio_page_id,
+  student_list_page_id: s.student_list_page_id,
+  reportPeriod: s.reportPeriod,
+  classPeriod: s.classPeriod,
+  lastMonthStart: s.lastMonthStart,
+  lastMonthEnd: s.lastMonthEnd
 } };`;
+      } else {
+        // name mode
+        return `// 수업일지 조회 Body 준비 (이름 모드)
+var s = $input.item.json;
+var body = { page_size: 100 };
+return { json: {
+  requestBody: JSON.stringify(body),
+  student_name: s.student_name,
+  portfolio_page_id: s.portfolio_page_id,
+  student_list_page_id: '',
+  reportPeriod: s.reportPeriod,
+  classPeriod: s.classPeriod,
+  lastMonthStart: s.lastMonthStart,
+  lastMonthEnd: s.lastMonthEnd
+} };`;
+      }
     }
 
-    function buildGroupMatchCode() {
-      // 동적 필드 모드
-      if (dynamicFields) {
-        const nameField = dynamicFields.find(f => f.role === 'studentName');
-        const dateField = dynamicFields.find(f => f.role === 'date');
-        const dataFields = dynamicFields.filter(f => f.role === 'data');
-        // 전체 필드 이름 목록 (디버그용)
-        const allFieldNames = dynamicFields.map(f => f.name);
+    function buildDataAggregateCode() {
+      const dataFields = dynamicFields ? dynamicFields.filter(function(f) { return f.role === 'data'; }) : [];
+      const dateFieldName = dynamicFields ? (dynamicFields.find(function(f) { return f.role === 'date'; })?.name || '날짜') : '날짜';
+      const nameFieldName = dynamicFields ? (dynamicFields.find(function(f) { return f.role === 'studentName'; })?.name || 'F이름') : 'F이름';
 
-        const nameFieldName = nameField?.name || '이름';
-        const dateFieldName = dateField?.name || '날짜';
+      // Build field extraction lines
+      const fieldExtractLines = dataFields.map(function(f) {
+        return `  logEntry[${JSON.stringify(f.name)}] = getVal(props[${JSON.stringify(f.name)}]);`;
+      }).join('\n');
 
-        // 데이터 필드에서 로그 객체 속성 생성 코드
-        const logFieldsCode = dataFields.map(f =>
-          `  logEntry[${JSON.stringify(f.name)}] = getVal(props[${JSON.stringify(f.name)}]);`
-        ).join('\n');
+      const fieldNamesArr = JSON.stringify(dataFields.map(function(f) { return f.name; }));
 
-        return `// 이름 매칭 & 학생별 수업일지 그룹화 (v3 전면 재설계)
-const sd    = $('학생 이름 추출').first().json;
-const input = $input.first().json;
-const pages = input.results || [];
+      // Build name filter code
+      let nameFilterCode = '';
+      if (queryMode !== 'relation') {
+        nameFilterCode = `
+  // 이름 매칭 (이름 모드)
+  var rawName = '';
+  // formula > rich_text > title 순으로 이름 탐색
+  var nameEntries = [];
+  for (var nk in props) {
+    var sk = nk.replace(/[\\u{1F000}-\\u{1FFFF}]/gu, '').replace(/[\\uFE0F\\u200D]/g, '').trim();
+    if (sk.indexOf('이름') !== -1 || nk.indexOf('name') !== -1) {
+      if (props[nk].type !== 'relation') nameEntries.push(props[nk]);
+    }
+  }
+  nameEntries.sort(function(a,b) {
+    var order = {formula:0, rich_text:1, title:2};
+    return (order[a.type]||9) - (order[b.type]||9);
+  });
+  for (var ni = 0; ni < nameEntries.length; ni++) {
+    var nv = getVal(nameEntries[ni]);
+    if (nv && nv.trim().length > 0 && nv.length < 20) { rawName = nv.trim(); break; }
+  }
+  if (!rawName) continue;
+  var normalized = rawName.replace(/\\s+/g, '');
+  var target = prev.student_name.replace(/\\s+/g, '');
+  if (normalized !== target && normalized.indexOf(target) === -1 && target.indexOf(normalized) === -1) continue;`;
+      }
 
-const { studentNames = [], studentMap = {}, reportPeriod = '', classPeriod = '',
-        lastMonthStart = '', lastMonthEnd = '' } = sd;
+      return `// 데이터 집계 (v4: 단일 학생의 수업일지 처리)
+var prev = $('수업일지 Body 준비').item.json;
+var input = $input.first().json;
+var pages = input.results || [];
 
-// ═══ 값 추출 함수 (모든 Notion 속성 타입 지원) ═══
 function getVal(prop) {
   if (!prop) return '';
   var t = prop.type;
-  if (t === 'title')       return (prop.title && prop.title[0]) ? prop.title[0].plain_text : '';
-  if (t === 'rich_text')   return (prop.rich_text && prop.rich_text[0]) ? prop.rich_text[0].plain_text : '';
-  if (t === 'select')      return prop.select ? (prop.select.name || '') : '';
+  if (t === 'title') return (prop.title && prop.title[0]) ? prop.title[0].plain_text : '';
+  if (t === 'rich_text') return (prop.rich_text && prop.rich_text[0]) ? prop.rich_text[0].plain_text : '';
+  if (t === 'select') return prop.select ? (prop.select.name || '') : '';
   if (t === 'multi_select') return (prop.multi_select || []).map(function(s){ return s.name; }).join(', ');
-  if (t === 'date')        return prop.date ? (prop.date.start || '') : '';
-  if (t === 'number')      return prop.number != null ? String(prop.number) : '';
-  if (t === 'checkbox')    return prop.checkbox ? 'Y' : 'N';
-  if (t === 'status')      return prop.status ? (prop.status.name || '') : '';
-  if (t === 'url')         return prop.url || '';
-  if (t === 'email')       return prop.email || '';
+  if (t === 'date') return prop.date ? (prop.date.start || '') : '';
+  if (t === 'number') return prop.number != null ? String(prop.number) : '';
+  if (t === 'checkbox') return prop.checkbox ? 'Y' : 'N';
+  if (t === 'status') return prop.status ? (prop.status.name || '') : '';
+  if (t === 'url') return prop.url || '';
+  if (t === 'email') return prop.email || '';
   if (t === 'phone_number') return prop.phone_number || '';
   if (t === 'created_time') return (prop.created_time || '').split('T')[0];
-  if (t === 'last_edited_time') return (prop.last_edited_time || '').split('T')[0];
   if (t === 'formula') {
     var f = prop.formula;
     if (!f) return '';
-    if (f.type === 'string')  return f.string || '';
-    if (f.type === 'number')  return f.number != null ? String(f.number) : '';
-    if (f.type === 'date')    return f.date ? (f.date.start || '') : '';
+    if (f.type === 'string') return f.string || '';
+    if (f.type === 'number') return f.number != null ? String(f.number) : '';
+    if (f.type === 'date') return f.date ? (f.date.start || '') : '';
     if (f.type === 'boolean') return f.boolean ? 'Y' : 'N';
     if (typeof f.string !== 'undefined') return f.string || '';
     return '';
@@ -298,74 +359,12 @@ function getVal(prop) {
       return '';
     }).filter(Boolean).join(', ');
   }
-  if (t === 'relation') return ''; // relation은 ID만 반환 → 이름 추출 불가, 스킵
   return '';
 }
 
-// ═══ 이름 판별 ═══
-function looksLikeDate(s) {
-  if (!s) return true;
-  s = s.trim();
-  if (s.length === 0) return true;
-  if (/^\\d{4}[-.\\/]/.test(s)) return true;
-  if (/^\\d{4}년/.test(s)) return true;
-  if (/^\\d{1,2}월\\s*\\d{1,2}일/.test(s)) return true;
-  if (s.length > 20) return true;
-  // UUID 패턴 (relation ID)
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}/.test(s)) return true;
-  return false;
-}
-
-function isValidName(s) {
-  return s && s.trim().length > 0 && s.trim().length <= 20 && !looksLikeDate(s);
-}
-
-// ═══ 학생 이름 추출 (핵심 - relation 감지 + formula 우선) ═══
-function findName(props) {
-  // 1) 지정된 필드
-  var specified = props[${JSON.stringify(nameFieldName)}];
-  if (specified) {
-    // relation이면 스킵 (ID만 반환되므로)
-    if (specified.type !== 'relation') {
-      var v = getVal(specified);
-      if (isValidName(v)) return v.trim();
-    }
-  }
-
-  // 2) 이름 관련 필드 탐색: formula 최우선
-  var nameEntries = [];
-  for (var key in props) {
-    if (key.indexOf('이름') !== -1 || key.indexOf('name') !== -1 || key.indexOf('Name') !== -1) {
-      nameEntries.push([key, props[key]]);
-    }
-  }
-  // formula > rich_text > title > select 순 정렬
-  nameEntries.sort(function(a, b) {
-    var order = { formula: 0, rich_text: 1, title: 2, select: 3 };
-    var oa = order[a[1].type] !== undefined ? order[a[1].type] : 9;
-    var ob = order[b[1].type] !== undefined ? order[b[1].type] : 9;
-    return oa - ob;
-  });
-  for (var i = 0; i < nameEntries.length; i++) {
-    if (nameEntries[i][1].type === 'relation') continue; // relation 스킵
-    var r = getVal(nameEntries[i][1]);
-    if (isValidName(r)) return r.trim();
-  }
-
-  // 3) title 타입 fallback
-  for (var key2 in props) {
-    var val = props[key2];
-    if (val.type === 'title' && val.title && val.title[0] && val.title[0].plain_text) {
-      var t = val.title[0].plain_text.trim();
-      if (isValidName(t)) return t;
-    }
-  }
-  return '';
-}
-
-// ═══ 날짜 추출 (느슨한 필터링) ═══
+// 날짜 추출
 function findDate(props, createdTime) {
-  // 1) 지정된 날짜 필드
+  // 지정된 날짜 필드
   var dp = props[${JSON.stringify(dateFieldName)}];
   if (dp) {
     if (dp.date && dp.date.start) return dp.date.start;
@@ -382,361 +381,57 @@ function findDate(props, createdTime) {
       if (dm) return dm[0];
     }
   }
-
-  // 2) 'date' 타입인 다른 필드 탐색
+  // date 타입 필드 자동 탐색
   for (var key in props) {
     if (props[key].type === 'date' && props[key].date && props[key].date.start) {
       return props[key].date.start;
     }
   }
-
-  // 3) created_time fallback
   return (createdTime || '').split('T')[0];
 }
 
-// ═══ 날짜 범위 체크 (느슨하게 - 못 찾으면 포함) ═══
+// 날짜 범위 체크 (느슨: 못 찾으면 포함)
 function inRange(dateStr) {
-  if (!dateStr || !lastMonthStart || !lastMonthEnd) return true;
-  var d = dateStr.slice(0, 10); // YYYY-MM-DD
-  if (d.length < 10) return true; // 날짜 형식 불완전 → 포함
-  return d >= lastMonthStart && d <= lastMonthEnd;
+  var start = prev.lastMonthStart;
+  var end = prev.lastMonthEnd;
+  if (!dateStr || !start || !end) return true;
+  var d = dateStr.slice(0, 10);
+  if (d.length < 10) return true;
+  return d >= start && d <= end;
 }
 
-function normalize(s) { return (s || '').trim().replace(/\\s+/g, ''); }
+var logs = [];
+var total = 0, inrange = 0, outrange = 0;
 
-function matchStudent(rawName, studentNames) {
-  var names = rawName.split(/[,，、\\/]/).map(function(n){ return normalize(n); }).filter(Boolean);
-  for (var i = 0; i < names.length; i++) {
-    var n = names[i];
-    // 정확 매칭
-    for (var j = 0; j < studentNames.length; j++) {
-      if (normalize(studentNames[j]) === n) return studentNames[j];
-    }
-    // 부분 매칭
-    for (var j2 = 0; j2 < studentNames.length; j2++) {
-      var ns = normalize(studentNames[j2]);
-      if (n.indexOf(ns) !== -1 || ns.indexOf(n) !== -1) return studentNames[j2];
-    }
-  }
-  return null;
-}
-
-// ═══ 메인 그룹화 로직 ═══
-var grouped = {};
-var matched = 0, outOfRange = 0, unmatched = 0, nameNotFound = 0;
-var allNames = new Set();
-
-var validStudentNames = studentNames.filter(function(n){ return isValidName(n); });
-console.log('포트폴리오 학생: ' + validStudentNames.join(', ') + ' (' + validStudentNames.length + '명)');
-
-// 1차: 모든 수업일지 순회
-for (var pi = 0; pi < pages.length; pi++) {
-  var page = pages[pi];
+for (var i = 0; i < pages.length; i++) {
+  var page = pages[i];
   var props = page.properties || {};
-  var rawName = findName(props);
+  total++;
 
-  if (!rawName) { nameNotFound++; continue; }
-  allNames.add(rawName);
-
-  // 매칭 시도
-  var finalName = null;
-  if (validStudentNames.length > 0) {
-    finalName = matchStudent(rawName, validStudentNames);
-  }
-  // 매칭 실패 시 수업일지 이름 직접 사용
-  if (!finalName) {
-    if (isValidName(rawName)) {
-      finalName = rawName.trim();
-    } else {
-      unmatched++;
-      continue;
-    }
-  }
+  // 이름 모드: 학생 이름 매칭 (relation 모드에서는 이미 필터됨)
+  ${nameFilterCode}
 
   var logDate = findDate(props, page.created_time);
-  if (!inRange(logDate)) { outOfRange++; continue; }
-
-  matched++;
-  if (!grouped[finalName]) {
-    var mapEntry = studentMap[finalName] || studentMap[normalize(finalName)] || null;
-    grouped[finalName] = {
-      student_name: finalName,
-      reportPeriod: reportPeriod,
-      classPeriod: classPeriod,
-      page_id: mapEntry ? mapEntry.portfolio_page_id : '',
-      logs: [],
-      fieldNames: ${JSON.stringify(dataFields.map(f => f.name))}
-    };
-  }
+  if (!inRange(logDate)) { outrange++; continue; }
+  inrange++;
 
   var logEntry = { date: logDate };
-${logFieldsCode.split('\n').map(line => '  ' + line).join('\n')}
-  grouped[finalName].logs.push(logEntry);
+${fieldExtractLines}
+  logs.push(logEntry);
 }
 
-console.log('결과: 매칭 ' + matched + ' / 기간외 ' + outOfRange + ' / 이름없음 ' + nameNotFound + ' / 미매칭 ' + unmatched);
-console.log('수업일지 이름 목록: ' + [...allNames].sort().join(', '));
+console.log(prev.student_name + ': 총 ' + total + '건, 기간내 ' + inrange + ', 기간외 ' + outrange + ', logs ' + logs.length + '건');
 
-// 포트폴리오에 있는 학생만 필터링 (포트폴리오 이름이 유효한 경우)
-var students;
-if (validStudentNames.length > 0) {
-  // 포트폴리오 학생만 출력 (매칭된 것만)
-  students = validStudentNames
-    .filter(function(name) { return grouped[name] && grouped[name].logs.length > 0; })
-    .map(function(name) {
-      var s = grouped[name];
-      s.logs.sort(function(a,b) { return new Date(a.date) - new Date(b.date); });
-      return { json: s };
-    });
+logs.sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
 
-  // 포트폴리오 매칭이 0건이면 전체 출력
-  if (students.length === 0) {
-    console.log('포트폴리오 매칭 0건 → 수업일지 전체 학생 출력');
-    students = Object.values(grouped).map(function(s) {
-      s.logs.sort(function(a,b) { return new Date(a.date) - new Date(b.date); });
-      return { json: s };
-    });
-  }
-} else {
-  students = Object.values(grouped).map(function(s) {
-    s.logs.sort(function(a,b) { return new Date(a.date) - new Date(b.date); });
-    return { json: s };
-  });
-}
-
-if (students.length === 0) {
-  return [{ json: {
-    _debug: true,
-    student_name: '(매칭없음)',
-    reportPeriod: reportPeriod, classPeriod: classPeriod, page_id: '', logs: [], fieldNames: [],
-    debug_info: {
-      total_pages: pages.length,
-      studentNames_raw: studentNames,
-      validStudentNames: validStudentNames,
-      all_names_in_db: [...allNames].sort(),
-      nameNotFound: nameNotFound
-    }
-  }}];
-}
-return students;`;
-      }
-
-      // 레거시 모드 (기존 고정 필드)
-      const sn = prop.classLog.studentName;
-      const dt = prop.classLog.date;
-      const co = prop.classLog.course;
-      const tb = prop.classLog.textbook;
-      const ct = prop.classLog.content;
-      const hw = prop.classLog.homework;
-      const nt = prop.classLog.note;
-      const st = prop.classLog.status || ['✅상태', '상태'];
-
-      // n8n Code 노드에서 || 를 안전하게 사용하기 위해 함수로 래핑
-      function makeGetValFunc(fields, varName) {
-        const lines = fields.map(f => `  v = getVal(props[${JSON.stringify(f)}]); if (v) return v;`);
-        return `function get_${varName}(props) {\n  let v;\n${lines.join('\n')}\n  return '';\n}`;
-      }
-      // 사용할 필드별 헬퍼 함수 정의
-      const fieldHelpers = [
-        makeGetValFunc(co, 'course'),
-        makeGetValFunc(tb, 'textbook'),
-        makeGetValFunc(ct, 'content'),
-        makeGetValFunc(hw, 'homework'),
-        makeGetValFunc(nt, 'note'),
-      ].join('\n');
-      const statusHelper = makeGetValFunc(st, 'status');
-
-      return `// 이름 매칭 & 학생별 수업일지 그룹화
-const sd    = $('학생 이름 추출').first().json;
-const input = $input.first().json;
-const pages = input.results || [];
-
-const { studentNames = [], studentMap = {}, reportPeriod = '', classPeriod = '',
-        lastMonthStart = '', lastMonthEnd = '' } = sd;
-
-function getVal(prop) {
-  if (!prop) return '';
-  switch (prop.type) {
-    case 'title':     return prop.title?.[0]?.plain_text     || '';
-    case 'rich_text': return prop.rich_text?.[0]?.plain_text || '';
-    case 'select':    return prop.select?.name               || '';
-    case 'date':      return prop.date?.start                || '';
-    case 'formula': {
-      const f = prop.formula;
-      if (!f) return '';
-      if (f.type === 'string') return f.string || '';
-      if (typeof f.string !== 'undefined') return f.string || '';
-      if (f.type === 'date')   return f.date?.start || '';
-      return '';
-    }
-    case 'rollup': {
-      const arr = prop.rollup?.array;
-      if (!arr || arr.length === 0) return '';
-      const first = arr[0];
-      if (first.type === 'select' && first.select) return first.select.name || '';
-      if (first.type === 'formula' && first.formula) {
-        if (first.formula.type === 'string') return first.formula.string || '';
-      }
-      return '';
-    }
-    default: return '';
-  }
-}
-
-${fieldHelpers}
-${statusHelper}
-
-function looksLikeDate(s) {
-  if (!s) return false;
-  if (/^\\d{4}-/.test(s)) return true;
-  if (/^\\d{4}년/.test(s)) return true;
-  if (/^\\d{2}\\.\\d{2}/.test(s)) return true;
-  if (s.length > 15) return true;
-  return false;
-}
-
-function findName(props) {
-  // 1) 지정된 필드에서 추출
-  ${sn.map(f => `{ const v = getVal(props[${JSON.stringify(f)}]); if (v && !looksLikeDate(v)) return v.trim(); }`).join('\n  ')}
-  // 2) 이름 관련 필드 탐색 (formula 우선)
-  const nameKeys = Object.entries(props)
-    .filter(([k]) => k.includes('이름') || k.includes('name'))
-    .sort((a, b) => {
-      const order = { formula: 0, rich_text: 1, title: 2 };
-      const oa = order[a[1].type] !== undefined ? order[a[1].type] : 9;
-      const ob = order[b[1].type] !== undefined ? order[b[1].type] : 9;
-      return oa - ob;
-    });
-  for (const [key, val] of nameKeys) {
-    const r = getVal(val);
-    if (r && !looksLikeDate(r)) return r.trim();
-  }
-  // 3) title fallback
-  for (const val of Object.values(props)) {
-    if (val.type === 'title' && val.title?.[0]?.plain_text) {
-      const t = val.title[0].plain_text.trim();
-      if (t && !looksLikeDate(t)) return t;
-    }
-  }
-  return '';
-}
-
-function findDate(props, createdTime) {
-  ${dt.map(f => `if (props[${JSON.stringify(f)}]?.date?.start) return props[${JSON.stringify(f)}].date.start;`).join('\n  ')}
-  return (createdTime || '').split('T')[0];
-}
-
-function inRange(dateStr) {
-  if (!dateStr || !lastMonthStart || !lastMonthEnd) return true;
-  return dateStr >= lastMonthStart && dateStr <= lastMonthEnd;
-}
-
-function normalize(s) { return (s || '').trim().replace(/\\s+/g, ''); }
-
-function matchStudent(rawName, studentNames) {
-  const names = rawName.split(/[,，、\\/]/).map(n => normalize(n)).filter(Boolean);
-  for (const n of names) {
-    // 1) 정규화 후 정확 매칭
-    const exact = studentNames.find(s => normalize(s) === n);
-    if (exact) return exact;
-    // 2) 부분 매칭 (포함 관계)
-    const partial = studentNames.find(s => n.includes(normalize(s)) || normalize(s).includes(n));
-    if (partial) return partial;
-  }
-  return null;
-}
-
-const grouped = {};
-let matched = 0, outOfRange = 0, unmatched = 0;
-const allNames = new Set();
-
-const validStudentNames = studentNames.filter(n => n && !looksLikeDate(n));
-const useDirectMode = validStudentNames.length === 0;
-if (useDirectMode) console.log('⚠️ 포트폴리오 이름 추출 실패! 수업일지에서 직접 학생 그룹핑');
-
-for (const page of pages) {
-  const props   = page.properties || {};
-  const rawName = findName(props);
-  if (!rawName) { unmatched++; continue; }
-  allNames.add(rawName);
-
-  let finalName;
-  if (useDirectMode) {
-    finalName = rawName.trim();
-    if (looksLikeDate(finalName)) { unmatched++; continue; }
-  } else {
-    finalName = matchStudent(rawName, validStudentNames);
-    if (!finalName) { unmatched++; continue; }
-  }
-
-  const logDate = findDate(props, page.created_time);
-  if (!inRange(logDate)) { outOfRange++; continue; }
-
-  matched++;
-  if (!grouped[finalName]) {
-    const mapEntry = useDirectMode ? null : studentMap[finalName];
-    grouped[finalName] = {
-      student_name: finalName,
-      reportPeriod, classPeriod,
-      page_id: mapEntry ? mapEntry.portfolio_page_id : '',
-      logs: []
-    };
-  }
-
-  const status = get_status(props);
-  const courseVal = status === '결석' ? '결석' : get_course(props);
-  grouped[finalName].logs.push({
-    date:     findDate(props, page.created_time),
-    course:   courseVal,
-    textbook: get_textbook(props),
-    content:  get_content(props),
-    homework: get_homework(props),
-    note:     get_note(props)
-  });
-}
-
-console.log(\`1차 모드: \${useDirectMode ? '직접' : '매칭'} / 매칭 \${matched} / 기간외 \${outOfRange} / 미매칭 \${unmatched}\`);
-
-// ★ 매칭 0건 → 직접 모드로 재시도
-if (matched === 0 && !useDirectMode && allNames.size > 0) {
-  console.log('⚠️ 매칭 0건! 수업일지 이름으로 직접 그룹핑 재시도...');
-  matched = 0; outOfRange = 0; unmatched = 0;
-  for (const page of pages) {
-    const props = page.properties || {};
-    const rawName = findName(props);
-    if (!rawName || looksLikeDate(rawName)) { unmatched++; continue; }
-    const logDate = findDate(props, page.created_time);
-    if (!inRange(logDate)) { outOfRange++; continue; }
-    matched++;
-    const finalName = rawName.trim();
-    if (!grouped[finalName]) {
-      grouped[finalName] = { student_name: finalName, reportPeriod, classPeriod, page_id: '', logs: [] };
-    }
-    const status = get_status(props);
-    const courseVal = status === '결석' ? '결석' : get_course(props);
-    grouped[finalName].logs.push({
-      date: findDate(props, page.created_time), course: courseVal,
-      textbook: get_textbook(props), content: get_content(props),
-      homework: get_homework(props), note: get_note(props)
-    });
-  }
-  console.log(\`2차 직접모드: 매칭 \${matched} / 기간외 \${outOfRange} / 미매칭 \${unmatched}\`);
-}
-
-const students = Object.values(grouped).map(s => {
-  s.logs.sort((a,b) => new Date(a.date)-new Date(b.date));
-  return { json: s };
-});
-
-if (students.length === 0) {
-  return [{ json: {
-    _debug: true,
-    student_name: '(매칭없음)',
-    reportPeriod, classPeriod, page_id: '', logs: [],
-    debug_info: { total_pages: pages.length, studentNames, all_names_in_db: [...allNames].sort() }
-  }}];
-}
-return students;`;
+return { json: {
+  student_name: prev.student_name,
+  reportPeriod: prev.reportPeriod,
+  classPeriod: prev.classPeriod,
+  page_id: prev.portfolio_page_id,
+  logs: logs,
+  fieldNames: ${fieldNamesArr}
+} };`;
     }
 
     function buildApiBodyCode() {
@@ -807,7 +502,7 @@ const logsText = logs.length > 0
       for (const fn of fieldNames) {
         if (l[fn] !== undefined && l[fn] !== '') parts.push(\`\${fn}:\${l[fn]}\`);
       }
-      return parts.join(' | ');
+      return parts.join('\\n');
     }).join('\\n')
   : '수업 기록 없음';`;
 
@@ -1546,7 +1241,7 @@ return { json: {
 } };`;
     }
 
-    // ── 노드 배열 구성 ──
+    // ── 노드 배열 구성 (v4) ──
     const nodes = [
       { parameters: {}, type: 'n8n-nodes-base.manualTrigger', typeVersion: 1, position: [-440, 640], id: ids.trigger, name: "When clicking 'Execute workflow'" },
       { parameters: { jsCode: buildDateCalcCode() }, type: 'n8n-nodes-base.code', typeVersion: 2, position: [-400, 920], id: ids.dateCalc, name: '날짜 계산' },
@@ -1564,25 +1259,31 @@ return { json: {
         type: 'n8n-nodes-base.notion', typeVersion: 2.2, position: [-180, 920], id: ids.portfolio, name: '포트폴리오 조회',
         credentials: { notionApi: { id: credentials.notion.id, name: credentials.notion.name } }
       },
-      { parameters: { jsCode: buildExtractNamesCode() }, type: 'n8n-nodes-base.code', typeVersion: 2, position: [40, 920], id: ids.extractNames, name: '학생 이름 추출' },
+      { parameters: { jsCode: buildStudentExtractCode() }, type: 'n8n-nodes-base.code', typeVersion: 2, position: [40, 920], id: ids.studentExtract, name: '학생 목록 추출' },
+      { parameters: { options: { reset: false } }, type: 'n8n-nodes-base.splitInBatches', typeVersion: 3, position: [260, 920], id: ids.loop, name: 'Loop Over Items' },
+      { parameters: { jsCode: buildClassLogBodyPrepCode() }, type: 'n8n-nodes-base.code', typeVersion: 2, position: [480, 920], id: ids.classLogBodyPrep, name: '수업일지 Body 준비' },
       {
         parameters: {
-          method: 'POST', url: `https://api.notion.com/v1/databases/${notion.classLogDbId}/query`,
-          authentication: 'predefinedCredentialType', nodeCredentialType: 'notionApi',
-          sendHeaders: true, headerParameters: { parameters: [
+          method: 'POST',
+          url: `https://api.notion.com/v1/databases/${notion.classLogDbId}/query`,
+          authentication: 'predefinedCredentialType',
+          nodeCredentialType: 'notionApi',
+          sendHeaders: true,
+          headerParameters: { parameters: [
             { name: 'Notion-Version', value: '2022-06-28' },
             { name: 'Content-Type', value: 'application/json' }
           ] },
-          sendBody: true, specifyBody: 'json',
-          jsonBody: "={{ JSON.stringify({\n  filter: {\n    and: [\n      { timestamp: \"created_time\", created_time: { on_or_after: $('학생 이름 추출').first().json.lastMonthStart } },\n      { timestamp: \"created_time\", created_time: { on_or_before: $('학생 이름 추출').first().json.lastMonthEnd + 'T23:59:59Z' } }\n    ]\n  },\n  page_size: 100\n}) }}",
+          sendBody: true,
+          specifyBody: 'json',
+          jsonBody: '={{ $json.requestBody }}',
           options: {}
         },
-        type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [260, 920], id: ids.classLogQuery, name: '수업일지 조회',
+        type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
+        position: [700, 920], id: ids.classLogQuery, name: '수업일지 조회',
         credentials: { notionApi: { id: credentials.notion.id, name: credentials.notion.name } }
       },
-      { parameters: { jsCode: buildGroupMatchCode() }, type: 'n8n-nodes-base.code', typeVersion: 2, position: [480, 920], id: ids.groupMatch, name: '이름 매칭' },
-      { parameters: { options: { reset: false } }, type: 'n8n-nodes-base.splitInBatches', typeVersion: 3, position: [700, 920], id: ids.loop, name: 'Loop Over Items' },
-      { parameters: { jsCode: buildApiBodyCode() }, type: 'n8n-nodes-base.code', typeVersion: 2, position: [920, 920], id: ids.apiBody, name: 'API Body 생성' },
+      { parameters: { jsCode: buildDataAggregateCode() }, type: 'n8n-nodes-base.code', typeVersion: 2, position: [920, 920], id: ids.dataAggregate, name: '데이터 집계' },
+      { parameters: { jsCode: buildApiBodyCode() }, type: 'n8n-nodes-base.code', typeVersion: 2, position: [1140, 920], id: ids.apiBody, name: 'API Body 생성' },
       {
         parameters: {
           method: 'POST', url: 'https://api.anthropic.com/v1/messages',
@@ -1594,10 +1295,10 @@ return { json: {
           sendBody: true, specifyBody: 'json', jsonBody: '={{ $json.apiBody }}',
           options: { timeout: 120000 }
         },
-        type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [1140, 920], id: ids.claudeCall, name: 'Claude API 호출',
+        type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [1360, 920], id: ids.claudeCall, name: 'Claude API 호출',
         credentials: { anthropicApi: { id: credentials.anthropic.id, name: credentials.anthropic.name } }
       },
-      { parameters: { jsCode: buildHtmlGenCode() }, type: 'n8n-nodes-base.code', typeVersion: 2, position: [1360, 920], id: ids.htmlGen, name: 'HTML 생성' },
+      { parameters: { jsCode: buildHtmlGenCode() }, type: 'n8n-nodes-base.code', typeVersion: 2, position: [1580, 920], id: ids.htmlGen, name: 'HTML 생성' },
       {
         parameters: {
           url: `=https://api.github.com/repos/${github.owner}/${github.repo}/contents/{{ $json.file_path }}`,
@@ -1605,14 +1306,14 @@ return { json: {
           sendHeaders: true, headerParameters: { parameters: [{ name: 'Accept', value: 'application/vnd.github.v3+json' }] },
           options: { response: { response: { neverError: true } } }
         },
-        type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [1580, 920], id: ids.githubCheck, name: 'GitHub 파일 확인',
+        type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [1800, 920], id: ids.githubCheck, name: 'GitHub 파일 확인',
         alwaysOutputData: true, credentials: { githubApi: { id: credentials.github.id, name: credentials.github.name } }, continueOnFail: true
       },
       {
         parameters: {
           jsCode: `const checkResult = $input.item.json;\nconst htmlData    = $('HTML 생성').item.json;\n\nif (!htmlData?.html_base64) throw new Error('HTML 데이터 없음');\n\nconst sha = (!checkResult.message && checkResult.sha) ? checkResult.sha : null;\n\nconst body = {\n  message: \`\${sha ? 'Update' : 'Create'} report: \${htmlData.file_name}\`,\n  content: htmlData.html_base64,\n  branch: 'main'\n};\nif (sha) body.sha = sha;\n\nreturn { json: { body, file_path: htmlData.file_path, file_name: htmlData.file_name, student_name: htmlData.student_name, reportPeriod: htmlData.reportPeriod, page_id: htmlData.page_id, is_update: !!sha } };`
         },
-        type: 'n8n-nodes-base.code', typeVersion: 2, position: [1800, 920], id: ids.githubBody, name: 'GitHub Body 생성'
+        type: 'n8n-nodes-base.code', typeVersion: 2, position: [2020, 920], id: ids.githubBody, name: 'GitHub Body 생성'
       },
       {
         parameters: {
@@ -1621,14 +1322,14 @@ return { json: {
           sendHeaders: true, headerParameters: { parameters: [{ name: 'Accept', value: 'application/vnd.github.v3+json' }] },
           sendBody: true, specifyBody: 'json', jsonBody: '={{ $json.body }}', options: {}
         },
-        type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [2020, 920], id: ids.githubUpload, name: 'GitHub 업로드',
+        type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: [2240, 920], id: ids.githubUpload, name: 'GitHub 업로드',
         credentials: { githubApi: { id: credentials.github.id, name: credentials.github.name } }
       },
       {
         parameters: {
           jsCode: `const uploadResult = $input.item.json;\nconst bodyData    = $('GitHub Body 생성').item.json;\n\nconst pagesUrl   = \`https://${github.owner}.github.io/${github.repo}/\${bodyData.file_path}\`;\nconst previewUrl = \`https://htmlpreview.github.io/?https://github.com/${github.owner}/${github.repo}/blob/main/\${bodyData.file_path}\`;\n\nreturn { json: {\n  success: true,\n  student_name: bodyData.student_name,\n  file_name:    bodyData.file_name,\n  reportPeriod: bodyData.reportPeriod,\n  page_id:      bodyData.page_id,\n  report_url:   previewUrl,\n  pages_url:    pagesUrl\n} };`
         },
-        type: 'n8n-nodes-base.code', typeVersion: 2, position: [2240, 920], id: ids.done, name: '완료'
+        type: 'n8n-nodes-base.code', typeVersion: 2, position: [2460, 920], id: ids.done, name: '완료'
       },
       {
         parameters: {
@@ -1646,7 +1347,7 @@ return { json: {
           },
           options: {}
         },
-        type: 'n8n-nodes-base.if', typeVersion: 2.2, position: [2460, 920], id: ids.pageIdCheck, name: 'page_id 확인'
+        type: 'n8n-nodes-base.if', typeVersion: 2.2, position: [2680, 920], id: ids.pageIdCheck, name: 'page_id 확인'
       },
       {
         parameters: {
@@ -1659,7 +1360,7 @@ return { json: {
           ] },
           options: {}
         },
-        type: 'n8n-nodes-base.notion', typeVersion: 2.2, position: [2680, 840], id: ids.notionUpdate, name: 'Notion 업데이트',
+        type: 'n8n-nodes-base.notion', typeVersion: 2.2, position: [2900, 840], id: ids.notionUpdate, name: 'Notion 업데이트',
         credentials: { notionApi: { id: credentials.notion.id, name: credentials.notion.name } }
       }
     ];
@@ -1667,11 +1368,12 @@ return { json: {
     const connections = {
       "When clicking 'Execute workflow'": { main: [[{ node: '날짜 계산', type: 'main', index: 0 }]] },
       '날짜 계산':      { main: [[{ node: '포트폴리오 조회', type: 'main', index: 0 }]] },
-      '포트폴리오 조회': { main: [[{ node: '학생 이름 추출', type: 'main', index: 0 }]] },
-      '학생 이름 추출':  { main: [[{ node: '수업일지 조회', type: 'main', index: 0 }]] },
-      '수업일지 조회':   { main: [[{ node: '이름 매칭', type: 'main', index: 0 }]] },
-      '이름 매칭':      { main: [[{ node: 'Loop Over Items', type: 'main', index: 0 }]] },
-      'Loop Over Items': { main: [[], [{ node: 'API Body 생성', type: 'main', index: 0 }]] },
+      '포트폴리오 조회': { main: [[{ node: '학생 목록 추출', type: 'main', index: 0 }]] },
+      '학생 목록 추출':  { main: [[{ node: 'Loop Over Items', type: 'main', index: 0 }]] },
+      'Loop Over Items': { main: [[], [{ node: '수업일지 Body 준비', type: 'main', index: 0 }]] },
+      '수업일지 Body 준비': { main: [[{ node: '수업일지 조회', type: 'main', index: 0 }]] },
+      '수업일지 조회':   { main: [[{ node: '데이터 집계', type: 'main', index: 0 }]] },
+      '데이터 집계':     { main: [[{ node: 'API Body 생성', type: 'main', index: 0 }]] },
       'API Body 생성':   { main: [[{ node: 'Claude API 호출', type: 'main', index: 0 }]] },
       'Claude API 호출': { main: [[{ node: 'HTML 생성', type: 'main', index: 0 }]] },
       'HTML 생성':      { main: [[{ node: 'GitHub 파일 확인', type: 'main', index: 0 }]] },

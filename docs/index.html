@@ -297,6 +297,41 @@ textarea{resize:vertical;min-height:80px}
           </div>
           <div class="card">
             <div class="card-head">
+              <div class="card-icon green">&#128279;</div>
+              <div><div class="card-title">수업일지 조회 방식</div><div class="card-desc">학원의 Notion DB 구조에 맞는 조회 방식을 선택하세요</div></div>
+            </div>
+            <div class="card-body">
+              <div style="display:flex;gap:12px;margin-bottom:12px">
+                <label style="display:flex;align-items:center;gap:6px;padding:10px 16px;border:2px solid var(--border);border-radius:10px;cursor:pointer;flex:1;transition:all .15s" id="qmode-relation-label">
+                  <input type="radio" name="query-mode" value="relation" id="qmode-relation" onchange="toggleQueryMode()" checked> <strong>Relation 모드</strong>
+                  <span style="font-size:11px;color:var(--text3)">(학생 DB 연결)</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;padding:10px 16px;border:2px solid var(--border);border-radius:10px;cursor:pointer;flex:1;transition:all .15s" id="qmode-name-label">
+                  <input type="radio" name="query-mode" value="name" id="qmode-name" onchange="toggleQueryMode()"> <strong>이름 모드</strong>
+                  <span style="font-size:11px;color:var(--text3)">(이름 직접 매칭)</span>
+                </label>
+              </div>
+              <div id="relation-mode-fields">
+                <div class="field">
+                  <div class="field-label">수업일지 학생 relation 속성명</div>
+                  <input type="text" id="n-student-relation-prop" value="✅학생입력" placeholder="수업일지에서 학생을 연결하는 relation 속성명">
+                  <div class="field-hint">수업일지 DB에서 학생 DB와 연결된 relation 속성명</div>
+                </div>
+                <div class="field">
+                  <div class="field-label">포트폴리오 학생 relation 속성명</div>
+                  <input type="text" id="n-portfolio-student-relation" value="" placeholder="포트폴리오에서 학생 DB와 연결된 relation 속성명 (없으면 비워두기)">
+                  <div class="field-hint">포트폴리오 DB에서 학생 DB를 가리키는 relation 속성. 비어있으면 이름으로 학생 DB 조회</div>
+                </div>
+              </div>
+              <div id="name-mode-fields" style="display:none">
+                <div style="padding:12px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text3)">
+                  수업일지 전체를 조회한 후 학생 이름으로 매칭합니다. student_list DB가 없는 학원에서 사용하세요.
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head">
               <div class="card-icon orange">&#128196;</div>
               <div><div class="card-title">속성 매핑</div><div class="card-desc">수업일지 DB의 속성명을 매핑하세요 (쉼표로 여러 후보 입력 가능)</div></div>
               <div style="margin-left:auto" id="detected-badge" hidden>
@@ -690,6 +725,15 @@ function renderDetail() {
     setVal('n-api-key', s.notionConfig.apiKey);
     setVal('n-portfolio-db', s.notionConfig.portfolioDbId);
     setVal('n-classlog-db', s.notionConfig.classLogDbId);
+    // 조회 방식 로드
+    if (s.notionConfig.queryMode === 'name') {
+      document.getElementById('qmode-name').checked = true;
+    } else {
+      document.getElementById('qmode-relation').checked = true;
+    }
+    setVal('n-student-relation-prop', s.notionConfig.studentRelationProp || '✅학생입력');
+    setVal('n-portfolio-student-relation', s.notionConfig.portfolioStudentRelation || '');
+    toggleQueryMode();
     if (s.notionConfig.properties) {
       const p = s.notionConfig.properties;
       setVal('p-pf-name', p.portfolioName);
@@ -936,6 +980,16 @@ async function detectProperties() {
   }
 }
 
+// ── 조회 방식 토글 ──
+function toggleQueryMode() {
+  const isRelation = document.getElementById('qmode-relation').checked;
+  document.getElementById('relation-mode-fields').style.display = isRelation ? '' : 'none';
+  document.getElementById('name-mode-fields').style.display = isRelation ? 'none' : '';
+  // 라디오 라벨 스타일
+  document.getElementById('qmode-relation-label').style.borderColor = isRelation ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('qmode-name-label').style.borderColor = isRelation ? 'var(--border)' : 'var(--accent)';
+}
+
 // ── Notion 설정 저장 ──
 async function saveNotionConfig() {
   if (!currentSub) return;
@@ -953,12 +1007,17 @@ async function saveNotionConfig() {
     return;
   }
 
+  const queryMode = document.getElementById('qmode-relation').checked ? 'relation' : 'name';
+
   const notionConfig = {
     credentialId: val('n-cred-id'),
     credentialName: val('n-cred-name'),
     apiKey: val('n-api-key'),
     portfolioDbId: val('n-portfolio-db'),
     classLogDbId: val('n-classlog-db'),
+    queryMode: queryMode,
+    studentRelationProp: val('n-student-relation-prop'),
+    portfolioStudentRelation: val('n-portfolio-student-relation'),
     properties: {
       portfolioName: val('p-pf-name'),
       portfolioUrl: val('p-pf-url'),
@@ -1005,7 +1064,10 @@ async function generateWorkflow() {
     },
     notion: {
       portfolioDbId: nc.portfolioDbId,
-      classLogDbId: nc.classLogDbId
+      classLogDbId: nc.classLogDbId,
+      queryMode: nc.queryMode || 'relation',
+      studentRelationProp: nc.studentRelationProp || '✅학생입력',
+      portfolioStudentRelation: nc.portfolioStudentRelation || '',
     },
     properties: {
       portfolio: {

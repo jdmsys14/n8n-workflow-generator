@@ -4,10 +4,10 @@
 
 (function() {
   const REQUIRED_NODE_NAMES = [
-    '날짜 계산', '포트폴리오 조회', '학생 이름 추출', '수업일지 조회',
-    '이름 매칭', 'Loop Over Items', 'API Body 생성', 'Claude API 호출',
-    'HTML 생성', 'GitHub 파일 확인', 'GitHub Body 생성', 'GitHub 업로드',
-    '완료', 'Notion 업데이트'
+    '날짜 계산', '포트폴리오 조회', '학생 목록 추출', '수업일지 Body 준비',
+    '수업일지 조회', '데이터 집계', 'Loop Over Items', 'API Body 생성',
+    'Claude API 호출', 'HTML 생성', 'GitHub 파일 확인', 'GitHub Body 생성',
+    'GitHub 업로드', '완료', 'Notion 업데이트'
   ];
 
   class ValidationError {
