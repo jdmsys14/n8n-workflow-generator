@@ -251,6 +251,16 @@ textarea{resize:vertical;min-height:80px}
 
         <!-- TAB: Notion 설정 -->
         <div class="tab-panel" id="tab-notion">
+          <details style="margin-bottom:12px;background:var(--orange-light);border-radius:10px;padding:2px">
+            <summary style="cursor:pointer;padding:10px 14px;font-size:12px;font-weight:700;color:var(--orange)">&#9888; 새 학원 설정 시 반드시 확인하세요</summary>
+            <div style="padding:4px 14px 12px;font-size:11px;color:var(--text2);line-height:1.8">
+              <div>&#9745; 포트폴리오 DB, 수업일지 DB <strong>둘 다</strong> Notion Integration 연결 (DB별 개별 연결 필수)</div>
+              <div>&#9745; Integration 토큰은 <strong>해당 워크스페이스 것</strong> 사용 (다른 학원 토큰 혼용 시 404)</div>
+              <div>&#9745; 포트폴리오 이름 필드 타입 확인 (rich_text / title / formula)</div>
+              <div>&#9745; 수업일지 날짜 필드명 및 형식 확인 (date / title "2026-03-31-tue" 등)</div>
+              <div>&#9745; 수업일지에서 학생 식별 방식 확인 (relation / 이름 직접)</div>
+            </div>
+          </details>
           <div class="card">
             <div class="card-head">
               <div class="card-icon green">&#128273;</div>

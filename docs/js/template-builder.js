@@ -192,16 +192,21 @@ for (var i = 0; i < items.length; i++) {
       if (v && !looksLikeDate(v)) { name = v; break; }
     }
   }
+  // 3순위: title에서 이름 추출 (다양한 패턴 대응)
   if (!name || looksLikeDate(name)) {
     for (var key2 in props) {
       if (props[key2].type === 'title' && props[key2].title && props[key2].title[0]) {
-        var t = props[key2].title[0].plain_text;
-        if (t && !looksLikeDate(t.trim())) { name = t.trim(); break; }
+        var raw = props[key2].title[0].plain_text || '';
+        // 패턴: "2026-4월 - 주예나 포트폴리오" → "주예나"
+        var pm = raw.match(/[-–]\\s*([가-힣a-zA-Z]{2,10})\\s*(포트폴리오|학생|보고서)?/);
+        if (pm) { name = pm[1].trim(); break; }
+        // 패턴: "주예나" (title 자체가 이름)
+        if (raw.trim().length <= 10 && !looksLikeDate(raw.trim())) { name = raw.trim(); break; }
       }
     }
   }
   name = (name || '').trim().replace(/\\s+/g, ' ');
-  if (!name || looksLikeDate(name)) continue;
+  if (!name || name.length < 1) continue;
 
   // student_list page_id 추출 (relation 모드용)
   var student_list_page_id = '';
@@ -363,31 +368,51 @@ function getVal(prop) {
 }
 
 // 날짜 추출
+// 날짜 문자열에서 YYYY-MM-DD 추출 ("2026-03-31-tue", "2026-03-31", "3월 31일" 등)
+function parseDate(raw) {
+  if (!raw) return '';
+  var s = String(raw);
+  var m = s.match(/(\\d{4})-(\\d{1,2})-(\\d{1,2})/);
+  if (m) return m[1] + '-' + ('0'+m[2]).slice(-2) + '-' + ('0'+m[3]).slice(-2);
+  return '';
+}
+
 function findDate(props, createdTime) {
-  // 지정된 날짜 필드
+  // 1) 지정된 날짜 필드
   var dp = props[${JSON.stringify(dateFieldName)}];
   if (dp) {
-    if (dp.date && dp.date.start) return dp.date.start;
+    // date 타입
+    if (dp.date && dp.date.start) return dp.date.start.slice(0, 10);
+    // formula 타입
     if (dp.type === 'formula' && dp.formula) {
-      if (dp.formula.type === 'date' && dp.formula.date) return dp.formula.date.start || '';
-      if (dp.formula.type === 'string' && dp.formula.string) {
-        var m = dp.formula.string.match(/\\d{4}-\\d{2}-\\d{2}/);
-        if (m) return m[0];
-      }
+      if (dp.formula.type === 'date' && dp.formula.date) return (dp.formula.date.start || '').slice(0, 10);
+      if (dp.formula.type === 'string') { var pd = parseDate(dp.formula.string); if (pd) return pd; }
     }
+    // title/rich_text 타입 (예: "2026-03-31-tue")
     var dv = getVal(dp);
-    if (dv) {
-      var dm = dv.match(/\\d{4}-\\d{2}-\\d{2}/);
-      if (dm) return dm[0];
-    }
+    if (dv) { var pd2 = parseDate(dv); if (pd2) return pd2; }
   }
-  // date 타입 필드 자동 탐색
+
+  // 2) '날짜' 키워드가 포함된 다른 필드 탐색
   for (var key in props) {
-    if (props[key].type === 'date' && props[key].date && props[key].date.start) {
-      return props[key].date.start;
+    var sk = key.replace(/[^가-힣a-zA-Z]/g, '');
+    if (sk.indexOf('날짜') !== -1 || sk.indexOf('일자') !== -1 || sk.indexOf('date') !== -1) {
+      var p = props[key];
+      if (p.date && p.date.start) return p.date.start.slice(0, 10);
+      var pv = getVal(p);
+      if (pv) { var pd3 = parseDate(pv); if (pd3) return pd3; }
     }
   }
-  return (createdTime || '').split('T')[0];
+
+  // 3) date 타입 필드 자동 탐색
+  for (var key2 in props) {
+    if (props[key2].type === 'date' && props[key2].date && props[key2].date.start) {
+      return props[key2].date.start.slice(0, 10);
+    }
+  }
+
+  // 4) created_time fallback (최후 수단)
+  return (createdTime || '').slice(0, 10);
 }
 
 // 날짜 범위 체크 (느슨: 못 찾으면 포함)
