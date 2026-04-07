@@ -560,19 +560,8 @@ textarea{resize:vertical;min-height:80px}
               </div>
             </div>
 
-            <!-- API Key 입력 (AI 검증 필요 시) -->
-            <div id="agent-api-key-box" style="display:none;margin-top:8px">
-              <div class="card" style="border:1.5px dashed var(--border)">
-                <div class="card-body" style="padding:14px">
-                  <div class="field-label" style="margin-bottom:6px">&#128273; Claude API Key <span style="font-size:10px;color:var(--text3)">(브라우저에만 저장, 서버 전송 없음)</span></div>
-                  <div style="display:flex;gap:8px">
-                    <input type="password" id="gen-api-key-agent" placeholder="sk-ant-..." style="flex:1"
-                      oninput="localStorage.setItem('wfgen_claude_key',this.value)">
-                    <button class="btn btn-primary" onclick="agentValidateWorkflow()">&#10024; 검증 시작</button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <!-- API Key 입력 (AI 검증 필요 시) — gen-api-key와 통합, 별도 박스 제거 -->
+            <div id="agent-api-key-box" style="display:none"></div>
           </div>
           <div style="display:flex;justify-content:flex-start;margin-top:8px">
             <button class="btn btn-secondary" onclick="switchTab('notion',document.querySelectorAll('.tab')[1])">&#8592; 이전</button>
@@ -1424,8 +1413,10 @@ async function agentValidateWorkflow() {
     || document.getElementById('r-api-key')?.value?.trim();
 
   if (!apiKey) {
-    document.getElementById('agent-api-key-box').style.display = 'block';
+    // autofix-box의 키 입력란으로 안내 (별도 박스 불필요)
+    document.getElementById('autofix-key-row').style.display = 'block';
     document.getElementById('gen-api-key').focus();
+    showAlert('error', 'Claude API Key를 위의 AI 자동 최적화 박스에 입력해주세요.');
     return;
   }
 
