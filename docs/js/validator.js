@@ -242,6 +242,38 @@
         node.waitBetweenTries = 12000;
         fixes.push('[Claude API 호출] retryOnFail 자동 설정 (3회, 12초)');
       }
+
+      if (node.type === 'n8n-nodes-base.code' && node.parameters?.jsCode) {
+        let code = node.parameters.jsCode;
+
+        // ① formula 필터 → rich_text 자동 교체
+        if (code.includes('"formula"') && code.includes('filter')) {
+          code = code.replace(/"formula"\s*:\s*\{[^}]*"string"\s*:\s*\{([^}]*)\}\s*\}/g,
+            function(m, inner) { return '"rich_text": {' + inner + '}'; });
+          if (code !== node.parameters.jsCode) {
+            node.parameters.jsCode = code;
+            fixes.push('[' + node.name + '] formula 필터 → rich_text 자동 교체 (①)');
+          }
+        }
+
+        // ④ max_tokens 최소 4000 적용
+        if (node.name === 'API Body 생성') {
+          const newCode = code.replace(/max_tokens\s*:\s*(\d+)/, function(m, n) {
+            if (parseInt(n, 10) < 4000) {
+              fixes.push('[API Body 생성] max_tokens ' + n + ' → 4000 자동 조정 (④)');
+              return 'max_tokens: 4000';
+            }
+            return m;
+          });
+          node.parameters.jsCode = newCode;
+          code = newCode;
+        }
+
+        // ⑥ 템플릿 리터럴 내 || 패턴 경고 (자동수정 어려우므로 기록만)
+        if (code.match(/`[^`]*\$\{[^}]*\|\|[^}]*\}[^`]*`/)) {
+          fixes.push('[' + node.name + '] 템플릿 리터럴 내 || 패턴 감지 — Claude 수정 필요 (⑥)');
+        }
+      }
     }
     return fixes;
   }

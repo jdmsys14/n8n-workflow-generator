@@ -511,8 +511,8 @@ textarea{resize:vertical;min-height:80px}
                 <div class="card-head">
                   <div class="card-icon purple">&#128260;</div>
                   <div>
-                    <div class="card-title">AI 자동 수정 루프</div>
-                    <div class="card-desc">에러가 해결될 때까지 Claude가 반복 수정합니다 (최대 3회)</div>
+                    <div class="card-title">AI 자동 최적화</div>
+                    <div class="card-desc">생성 즉시 Claude가 코드를 자동 검토·최적화합니다 (최대 5라운드)</div>
                   </div>
                 </div>
                 <div class="card-body">
@@ -1319,21 +1319,20 @@ async function generateWorkflow() {
     const allErrors = validateWorkflow(workflow);
     showValidationResult(allErrors);
 
-    // 에러가 있으면 자동 수정 루프 박스 표시
+    // AI 자동 최적화 루프 (항상 실행)
     const criticalErrors = allErrors.filter(function(e) { return e.level === 'error'; });
     const autofixBox = document.getElementById('autofix-box');
-    if (criticalErrors.length > 0) {
-      autofixBox.style.display = 'block';
-      document.getElementById('autofix-final').style.display = 'none';
-      document.getElementById('autofix-progress').style.display = 'none';
-      document.getElementById('autofix-rounds').innerHTML = '';
-      // API 키 없으면 입력란 표시
-      const savedKey = localStorage.getItem('wfgen_claude_key');
-      if (!savedKey) {
-        document.getElementById('autofix-key-row').style.display = 'block';
-      }
+    autofixBox.style.display = 'block';
+    document.getElementById('autofix-final').style.display = 'none';
+    document.getElementById('autofix-progress').style.display = 'none';
+    document.getElementById('autofix-rounds').innerHTML = '';
+    const savedKey = localStorage.getItem('wfgen_claude_key');
+    if (savedKey) {
+      document.getElementById('autofix-key-row').style.display = 'none';
+      // API 키 있으면 자동 시작
+      setTimeout(function() { startAutoFixLoop(); }, 500);
     } else {
-      autofixBox.style.display = 'none';
+      document.getElementById('autofix-key-row').style.display = 'block';
     }
 
     // 워크플로우 localStorage에 저장
@@ -1526,7 +1525,7 @@ async function startAutoFixLoop() {
   document.getElementById('autofix-final').style.display = 'none';
   document.getElementById('autofix-rounds').innerHTML = '';
 
-  const MAX_ROUNDS = 3;
+  const MAX_ROUNDS = 5;
   let current = JSON.parse(JSON.stringify(lastWorkflow));
   let roundResults = [];
 
@@ -1539,41 +1538,46 @@ async function startAutoFixLoop() {
     const errors     = allErrors.filter(function(e) { return e.level === 'error'; });
     const warnings   = allErrors.filter(function(e) { return e.level === 'warning'; });
 
-    addRoundBadge(round, errors.length, warnings.length, '분석 중...');
+    addRoundBadge(round, errors.length, warnings.length, '검토 중...');
     setAutofixStatus(`라운드 ${round}/${MAX_ROUNDS} — 에러 ${errors.length}건, 경고 ${warnings.length}건`);
 
-    // 3) 에러 없으면 완료
-    if (errors.length === 0) {
-      updateRoundBadge(round, 'pass', '에러 없음 ✅');
+    // 3) 에러 없고 Round 2 이후면 완료 (Round 1은 에러 없어도 proactive 검토 실행)
+    if (errors.length === 0 && round > 1) {
+      updateRoundBadge(round, 'pass', '최적화 완료 ✅');
       showAutofixFinal(current, [], warnings, round);
       break;
     }
 
-    // 4) AI 수정 가능한 에러만 필터 (크리덴셜/DB ID 제외)
-    const fixableErrors = errors.filter(function(e) {
-      return !e.message.includes('credential') && !e.message.includes('DbId') && !e.message.includes('DB ID');
-    });
+    // 4) AI 수정 불가 에러만 남은 경우 (크레덴셜/DB ID)
     const manualErrors = errors.filter(function(e) {
       return e.message.includes('credential') || e.message.includes('DbId') || e.message.includes('DB ID');
     });
+    const fixableErrors = errors.filter(function(e) {
+      return !e.message.includes('credential') && !e.message.includes('DbId') && !e.message.includes('DB ID');
+    });
 
-    if (fixableErrors.length === 0) {
-      // AI가 고칠 수 없는 에러만 남음
+    if (errors.length > 0 && fixableErrors.length === 0) {
       updateRoundBadge(round, 'manual', `수동 수정 필요 ${manualErrors.length}건`);
       showAutofixFinal(current, errors, warnings, round);
       break;
     }
 
-    // 5) Claude로 수정
-    updateRoundBadge(round, 'fixing', 'Claude 수정 중...');
+    // 5) Claude로 수정/최적화 (에러 없어도 Round 1은 proactive 검토)
+    const isProactive = errors.length === 0;
+    updateRoundBadge(round, 'fixing', isProactive ? 'Claude 프로액티브 검토 중...' : 'Claude 수정 중...');
     try {
-      const fixed = await claudeFixRound(current, fixableErrors, warnings, apiKey, round);
+      const fixed = await claudeFixRound(current, fixableErrors, warnings, apiKey, round, isProactive);
       if (fixed) {
         current = fixed;
         roundResults.push({ round, fixed: true });
-        updateRoundBadge(round, 'fixed', `${fixableErrors.length}건 수정 완료`);
+        updateRoundBadge(round, 'fixed', isProactive ? '코드 최적화 완료' : fixableErrors.length + '건 수정 완료');
+        // 수정된 JSON 즉시 반영
+        lastWorkflow = current;
+        document.getElementById('json-output').textContent = JSON.stringify(current, null, 2);
       } else {
-        updateRoundBadge(round, 'fail', '수정 실패');
+        // fixes[] 비었으면 → 변경 없음 → 완료
+        updateRoundBadge(round, 'pass', '변경 없음 ✅');
+        showAutofixFinal(current, errors, warnings, round);
         break;
       }
     } catch(e) {
@@ -1592,53 +1596,107 @@ async function startAutoFixLoop() {
   }
 
   btn.disabled = false;
-  btn.innerHTML = '&#128260; AI 자동 수정 다시 실행';
+  btn.innerHTML = '&#128260; AI 최적화 다시 실행';
 }
 
-async function claudeFixRound(workflow, errors, warnings, apiKey, round) {
-  // 코드 노드만 추출 (수정 대상)
+async function claudeFixRound(workflow, errors, warnings, apiKey, round, isProactive) {
+  // 코드 노드 추출
   const codeNodes = workflow.nodes.filter(function(n) { return n.type === 'n8n-nodes-base.code'; });
   const codeNodeStr = codeNodes.map(function(n) {
     return '=== 노드: ' + n.name + ' ===\n' + (n.parameters?.jsCode || '(없음)');
-  }).join('\n\n');
+  }).join('\n\n---\n\n');
 
-  const errorStr = errors.map(function(e, i) {
-    return `${i+1}. [${e.pattern || '일반'}] ${e.node ? '[' + e.node + '] ' : ''}${e.message}`;
-  }).join('\n');
+  const errorStr = errors.length > 0
+    ? errors.map(function(e, i) {
+        return (i+1) + '. [' + (e.pattern || '일반') + '] ' + (e.node ? '[' + e.node + '] ' : '') + e.message;
+      }).join('\n')
+    : '(정적 분석 에러 없음)';
 
   const warnStr = warnings.length > 0
-    ? '\n\n## 경고 (참고용)\n' + warnings.map(function(w) {
-        return `- [${w.pattern || '일반'}] ${w.node ? '[' + w.node + '] ' : ''}${w.message}`;
+    ? warnings.map(function(w) {
+        return '- [' + (w.pattern || '일반') + '] ' + (w.node ? '[' + w.node + '] ' : '') + w.message;
       }).join('\n')
-    : '';
+    : '(경고 없음)';
 
-  const prompt = `당신은 n8n 워크플로우 디버깅 전문가입니다. 아래 에러를 수정해주세요. (라운드 ${round}/3)
+  const modeNote = isProactive
+    ? '정적 분석에서 발견된 에러는 없습니다. 아래 실전 오류 패턴 체크리스트를 기준으로 코드를 프로액티브하게 검토·최적화하세요.'
+    : `라운드 ${round}/5 수정 모드: 위 에러를 반드시 수정하세요.`;
+
+  const prompt = `당신은 n8n 워크플로우 코드 전문 최적화 엔지니어입니다.
+
+${modeNote}
 
 ## 발견된 에러
-${errorStr}${warnStr}
+${errorStr}
 
-## 현재 Code 노드 코드
+## 경고
+${warnStr}
+
+## 실전 오류 패턴 체크리스트 (모든 라운드에서 반드시 확인)
+
+### ① Notion API 404 오류 — formula 필터 금지
+잘못된 예: { property: "학생", formula: { string: { contains: name } } }
+올바른 예: { property: "학생", rich_text: { contains: name } }
+→ filter 객체에서 "formula" 키가 있으면 "rich_text"로 교체
+
+### ② 학생 이름 추출 실패 — getValue() + title fallback
+필수 패턴:
+  let studentName = '';
+  const nameVal = getValue(props['이름']);  // 설정된 필드명
+  if (typeof nameVal === 'string') studentName = nameVal.trim();
+  if (!studentName) {
+    for (const [k, v] of Object.entries(props)) {
+      if (v.type === 'title') { studentName = getValue(v).trim(); break; }
+    }
+  }
+  if (!studentName) continue;
+
+### ③ 수업일지 날짜 범위 미필터
+Notion 쿼리에 날짜 필터 없으면 전체 데이터 조회 → 반드시 추가:
+  filter: {
+    and: [
+      { property: "수업 날짜", date: { on_or_after: monthStart } },
+      { property: "수업 날짜", date: { on_or_before: monthEnd } },
+      { property: "학생이름필드", rich_text: { contains: studentName } }
+    ]
+  }
+
+### ④ Claude 응답 JSON 파싱 실패 — 마크다운 제거
+반드시 포함: const cleaned = text.replace(/\`\`\`json|\`\`\`/gi, '').trim();
+max_tokens는 최소 4000 (미만이면 응답 잘림)
+
+### ⑤ API 529 — Claude API 노드 retryOnFail
+워크플로우 JSON의 'Claude API 호출' 노드: retryOnFail:true, maxTries:3, waitBetweenTries:12000
+
+### ⑥ 템플릿 리터럴 문법 오류 — || && 변수 추출
+잘못: \`\${a || b}\`
+올바름: const val = a || b; \`\${val}\`
+
+### ⑦ fetch() 패턴 — this.helpers.httpRequest 금지
+반드시: const _res = await fetch(url, { method, headers, body });
+         if (!_res.ok) throw new Error('실패: ' + _res.status + ' ' + await _res.text());
+         const data = await _res.json();
+
+### ⑧ JS 날짜 2차 필터 — Notion 필터만으로 부족할 때
+entries = entries.filter(e => e.date >= monthStart && e.date <= monthEnd);
+
+## 현재 Code 노드 전체 코드
 ${codeNodeStr}
-
-## n8n 핵심 규칙
-- fetch() 사용 가능 (this.helpers.httpRequest 금지)
-- $input.item.json / $input.first().json 으로 데이터 접근
-- return { json: {...} } 또는 return [{ json: {...} }, ...]
-- 템플릿 리터럴 안에 복잡한 표현식(||, &&) 금지 → 변수로 먼저 추출
-- Claude 응답 파싱 시 마크다운 코드블록 제거: text.replace(/\`\`\`json|\`\`\`/gi,'').trim()
-- 수업일지 필터: relation 또는 rich_text 사용 (formula 금지)
 
 ## 응답 형식 (순수 JSON만, 마크다운 코드블록 절대 금지)
 {
-  "analysis": "에러 원인 분석 (한국어, 2-3문장)",
+  "analysis": "발견한 문제 및 최적화 내용 요약 (한국어, 3-5문장)",
   "fixes": [
     {
-      "nodeName": "수정할 노드의 정확한 이름",
-      "fixedCode": "수정된 전체 JavaScript 코드",
-      "description": "수정 내용 (한국어)"
+      "nodeName": "수정할 노드의 정확한 이름 (template 코드에 있는 그대로)",
+      "fixedCode": "수정된 전체 JavaScript 코드 (절대 생략하지 말고 전체 코드 작성)",
+      "description": "수정·최적화 내용 (한국어)"
     }
   ]
-}`;
+}
+
+수정이 필요 없는 노드는 fixes 배열에 포함하지 마세요.
+모든 코드가 완벽하고 최적화할 것이 없으면 "fixes": [] 로만 응답하세요.`;
 
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -1650,7 +1708,7 @@ ${codeNodeStr}
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 8000,
+      max_tokens: 12000,
       messages: [{ role: 'user', content: prompt }]
     })
   });
@@ -1663,11 +1721,15 @@ ${codeNodeStr}
 
   const data = await resp.json();
   const text = data.content?.[0]?.text || '';
-  const jsonMatch = text.replace(/```json|```/g, '').trim().match(/\{[\s\S]*\}/);
+  const jsonMatch = text.replace(/```json|```/gi, '').trim().match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('AI 응답 파싱 실패');
 
-  const result = JSON.parse(jsonMatch[0]);
-  if (!result.fixes || result.fixes.length === 0) return workflow;
+  let result;
+  try { result = JSON.parse(jsonMatch[0]); }
+  catch(pe) { throw new Error('AI JSON 파싱 실패: ' + pe.message); }
+
+  // fixes 없거나 비어있으면 null 반환 → "변경 없음"
+  if (!result.fixes || result.fixes.length === 0) return null;
 
   // 수정 적용
   const updated = JSON.parse(JSON.stringify(workflow));
