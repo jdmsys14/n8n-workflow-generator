@@ -221,26 +221,61 @@ textarea{resize:vertical;min-height:80px}
               </div>
             </div>
           </div>
+          <!-- 샘플 HTML 업로드 -->
+          <div class="card" style="border-left:4px solid var(--purple)">
+            <div class="card-head">
+              <div class="card-icon purple">&#127912;</div>
+              <div><div class="card-title">디자인 템플릿</div><div class="card-desc">샘플 보고서 HTML을 업로드하면 디자인을 자동 추출합니다</div></div>
+            </div>
+            <div class="card-body">
+              <div class="field">
+                <div class="field-label">샘플 보고서 HTML 파일</div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input type="file" id="sample-html-file" accept=".html,.htm" onchange="uploadSampleHtml(this)" style="font-size:12px">
+                  <span id="sample-html-status" style="font-size:11px;color:var(--text3)"></span>
+                </div>
+                <div class="field-hint">기존에 만든 보고서 HTML 파일을 업로드하세요. 색상, 레이아웃, CSS가 자동 추출됩니다.</div>
+              </div>
+              <div id="sample-html-preview" style="display:none;margin-top:8px">
+                <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;max-height:200px;overflow-y:auto">
+                  <iframe id="sample-html-iframe" style="width:100%;height:200px;border:none;transform:scale(0.5);transform-origin:top left;width:200%;height:400px" sandbox></iframe>
+                </div>
+                <div style="margin-top:8px;display:flex;gap:8px">
+                  <button class="btn btn-primary btn-sm" onclick="extractDesignFromSample()">&#127912; 디자인 추출</button>
+                  <button class="btn btn-secondary btn-sm" onclick="clearSampleHtml()">&#128465; 삭제</button>
+                </div>
+              </div>
+              <!-- 추출된 디자인 결과 -->
+              <div id="extracted-design" style="display:none;margin-top:12px">
+                <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:8px">&#9989; 디자인 추출 완료</div>
+                <div class="row">
+                  <div class="field"><div class="field-label">Accent 1 (메인)</div><input type="color" id="ex-accent1" style="width:60px;height:32px;border:none;cursor:pointer"> <span id="ex-accent1-hex" style="font-size:11px;color:var(--text3)"></span></div>
+                  <div class="field"><div class="field-label">Accent 2 (서브)</div><input type="color" id="ex-accent2" style="width:60px;height:32px;border:none;cursor:pointer"> <span id="ex-accent2-hex" style="font-size:11px;color:var(--text3)"></span></div>
+                  <div class="field"><div class="field-label">Accent 3</div><input type="color" id="ex-accent3" style="width:60px;height:32px;border:none;cursor:pointer"> <span id="ex-accent3-hex" style="font-size:11px;color:var(--text3)"></span></div>
+                  <div class="field"><div class="field-label">Accent 4</div><input type="color" id="ex-accent4" style="width:60px;height:32px;border:none;cursor:pointer"> <span id="ex-accent4-hex" style="font-size:11px;color:var(--text3)"></span></div>
+                </div>
+                <div class="field"><div class="field-label">헤더 그라디언트</div><input type="text" id="ex-gradient" placeholder="linear-gradient(...)"></div>
+                <details style="margin-top:8px">
+                  <summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--text3)">추출된 전체 CSS 보기</summary>
+                  <textarea id="ex-full-css" rows="6" style="width:100%;font-family:monospace;font-size:10px;margin-top:4px;padding:8px;border:1px solid var(--border);border-radius:6px"></textarea>
+                </details>
+              </div>
+            </div>
+          </div>
+          <!-- 기존 디자인 표시 (설문 기반) -->
           <div class="card">
             <div class="card-head">
-              <div class="card-icon orange">&#127912;</div>
-              <div><div class="card-title">디자인 & 스타일 설정</div></div>
+              <div class="card-icon orange">&#128196;</div>
+              <div><div class="card-title">스타일 설정</div><div class="card-desc">접수 폼에서 입력된 정보</div></div>
             </div>
             <div class="card-body">
               <div class="info-grid triple">
                 <div class="info-item"><div class="info-label">메인 컬러</div><div class="info-value" id="d-main-color">-</div></div>
                 <div class="info-item"><div class="info-label">서브 컬러</div><div class="info-value" id="d-sub-color">-</div></div>
-                <div class="info-item"><div class="info-label">배경 톤</div><div class="info-value" id="d-bg-tone">-</div></div>
                 <div class="info-item"><div class="info-label">문체</div><div class="info-value" id="d-writing">-</div></div>
                 <div class="info-item"><div class="info-label">대상</div><div class="info-value" id="d-target">-</div></div>
                 <div class="info-item"><div class="info-label">존댓말</div><div class="info-value" id="d-honorific">-</div></div>
-                <div class="info-item"><div class="info-label">차트</div><div class="info-value" id="d-charts">-</div></div>
                 <div class="info-item"><div class="info-label">피드백</div><div class="info-value" id="d-feedback">-</div></div>
-                <div class="info-item"><div class="info-label">요약도</div><div class="info-value" id="d-summary">-</div></div>
-              </div>
-              <div style="margin-top:12px" id="d-extra-wrap" hidden>
-                <div class="info-label">추가 요청</div>
-                <div style="margin-top:4px;font-size:13px;color:var(--text2);line-height:1.6;white-space:pre-wrap" id="d-extra"></div>
               </div>
             </div>
           </div>
@@ -418,6 +453,7 @@ textarea{resize:vertical;min-height:80px}
             </div>
           </div>
           <div id="gen-result" style="display:none">
+            <!-- 생성 완료 카드 -->
             <div class="card">
               <div class="card-head">
                 <div class="card-icon green">&#9989;</div>
@@ -430,6 +466,111 @@ textarea{resize:vertical;min-height:80px}
                 <button class="btn btn-secondary btn-sm" onclick="copyJson()">&#128203; JSON 복사</button>
                 <button class="btn btn-primary btn-sm" onclick="downloadJson()">&#11015; JSON 다운로드</button>
                 <button class="btn btn-success btn-sm" onclick="copyWorkflowLink()">&#128279; 워크플로우 링크 복사</button>
+              </div>
+            </div>
+
+            <!-- Phase 1: 정적 검증 결과 -->
+            <div class="card" id="val-card">
+              <div class="card-head">
+                <div class="card-icon" id="val-icon" style="background:#eef2fe">&#128270;</div>
+                <div>
+                  <div class="card-title" id="val-title">워크플로우 검증 결과</div>
+                  <div class="card-desc" id="val-desc">-</div>
+                </div>
+                <div id="val-badge" style="margin-left:auto;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px"></div>
+              </div>
+              <div class="card-body" id="val-body"></div>
+              <div class="card-actions">
+                <button class="btn btn-primary btn-sm" id="btn-agent-val" onclick="agentValidateWorkflow()">
+                  &#10024; AI 심층 검증
+                </button>
+              </div>
+            </div>
+
+            <!-- Phase 2: AI 심층 검증 결과 -->
+            <div id="agent-val-result" style="display:none">
+              <div class="card" id="agent-val-card">
+                <div class="card-head">
+                  <div class="card-icon purple">&#129302;</div>
+                  <div>
+                    <div class="card-title">AI 심층 검증 결과</div>
+                    <div class="card-desc" id="agent-val-desc">-</div>
+                  </div>
+                  <div id="agent-val-badge" style="margin-left:auto;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px"></div>
+                </div>
+                <div class="card-body">
+                  <div id="agent-val-summary" style="font-size:13px;color:var(--text2);margin-bottom:12px;padding:10px;background:var(--surface2);border-radius:8px"></div>
+                  <div id="agent-val-issues"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 자동 수정 루프 -->
+            <div id="autofix-box" style="display:none">
+              <div class="card" style="border-left:4px solid var(--purple)">
+                <div class="card-head">
+                  <div class="card-icon purple">&#128260;</div>
+                  <div>
+                    <div class="card-title">AI 자동 수정 루프</div>
+                    <div class="card-desc">에러가 해결될 때까지 Claude가 반복 수정합니다 (최대 3회)</div>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <!-- API Key 입력 -->
+                  <div id="autofix-key-row" style="display:none;margin-bottom:12px">
+                    <div class="field-label" style="margin-bottom:6px">&#128273; Claude API Key</div>
+                    <div style="display:flex;gap:8px">
+                      <input type="password" id="gen-api-key" placeholder="sk-ant-..." style="flex:1"
+                        oninput="localStorage.setItem('wfgen_claude_key',this.value)">
+                    </div>
+                    <div class="field-hint">브라우저 로컬에만 저장됩니다. 서버로 전송되지 않습니다.</div>
+                  </div>
+                  <!-- 진행 상황 -->
+                  <div id="autofix-progress" style="display:none;margin-bottom:12px">
+                    <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px" id="autofix-status">분석 중...</div>
+                    <div id="autofix-rounds"></div>
+                  </div>
+                  <!-- 액션 버튼 -->
+                  <div style="display:flex;gap:8px">
+                    <button class="btn btn-primary btn-lg" id="btn-autofix" onclick="startAutoFixLoop()" style="flex:1">
+                      &#128260; AI 자동 수정 시작
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 수정 완료 최종 결과 -->
+            <div id="autofix-final" style="display:none">
+              <div class="card" id="autofix-final-card">
+                <div class="card-head">
+                  <div class="card-icon" id="autofix-final-icon">&#9989;</div>
+                  <div>
+                    <div class="card-title" id="autofix-final-title">수정 완료</div>
+                    <div class="card-desc" id="autofix-final-desc">-</div>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div id="autofix-remaining-issues" style="margin-bottom:12px"></div>
+                  <div style="display:flex;gap:8px">
+                    <button class="btn btn-primary" onclick="downloadFixedWorkflow()">&#11015; 수정된 워크플로우 다운로드</button>
+                    <button class="btn btn-secondary" onclick="copyFixedWorkflow()">&#128203; JSON 복사</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- API Key 입력 (AI 검증 필요 시) -->
+            <div id="agent-api-key-box" style="display:none;margin-top:8px">
+              <div class="card" style="border:1.5px dashed var(--border)">
+                <div class="card-body" style="padding:14px">
+                  <div class="field-label" style="margin-bottom:6px">&#128273; Claude API Key <span style="font-size:10px;color:var(--text3)">(브라우저에만 저장, 서버 전송 없음)</span></div>
+                  <div style="display:flex;gap:8px">
+                    <input type="password" id="gen-api-key-agent" placeholder="sk-ant-..." style="flex:1"
+                      oninput="localStorage.setItem('wfgen_claude_key',this.value)">
+                    <button class="btn btn-primary" onclick="agentValidateWorkflow()">&#10024; 검증 시작</button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1099,14 +1240,30 @@ async function generateWorkflow() {
             status: split(nc.properties?.status)
           }
     },
-    design: {
-      accent1: currentSub.design?.mainColor || '#3b6ef6',
-      accent2: currentSub.design?.subColor || '#12b886',
-      accent3: currentSub.design?.warnColor === 'orange' ? '#f76707' : currentSub.design?.warnColor === 'yellow' ? '#f59f00' : '#e64980',
-      accent4: currentSub.design?.positiveColor === 'green' ? '#12b886' : currentSub.design?.positiveColor === 'mint' ? '#20c997' : '#3b6ef6',
-      headerGradient: `linear-gradient(145deg, ${currentSub.design?.mainColor || '#3b6ef6'} 0%, ${lighten(currentSub.design?.mainColor || '#3b6ef6')} 100%)`,
-      customCss: ''
-    },
+    design: (function() {
+      // 추출된 디자인 우선 (color picker 현재값 반영)
+      const exA1 = document.getElementById('ex-accent1');
+      if (exA1 && document.getElementById('extracted-design').style.display !== 'none') {
+        return {
+          accent1: exA1.value || '#3b6ef6',
+          accent2: document.getElementById('ex-accent2').value || '#12b886',
+          accent3: document.getElementById('ex-accent3').value || '#f76707',
+          accent4: document.getElementById('ex-accent4').value || '#e64980',
+          headerGradient: document.getElementById('ex-gradient').value || `linear-gradient(145deg, ${exA1.value} 0%, ${lighten(exA1.value)} 100%)`,
+          customCss: document.getElementById('ex-full-css').value || '',
+        };
+      }
+      // fallback: 설문 기반 디자인
+      const mc = currentSub.design?.mainColor || '#3b6ef6';
+      return {
+        accent1: mc,
+        accent2: currentSub.design?.subColor || '#12b886',
+        accent3: '#f76707',
+        accent4: '#e64980',
+        headerGradient: currentSub.design?.headerGradient || `linear-gradient(145deg, ${mc} 0%, ${lighten(mc)} 100%)`,
+        customCss: currentSub.design?.customCss || '',
+      };
+    })(),
     intake: {
       writingStyle: currentSub.writing?.style || 'friendly',
       target: currentSub.writing?.target || 'parent',
@@ -1158,6 +1315,27 @@ async function generateWorkflow() {
     document.getElementById('json-output').textContent = JSON.stringify(workflow, null, 2);
     showAlert('success', `워크플로우가 생성되었습니다! (${nodeCount}개 노드)`);
 
+    // Phase 1 검증 결과 표시
+    const allErrors = validateWorkflow(workflow);
+    showValidationResult(allErrors);
+
+    // 에러가 있으면 자동 수정 루프 박스 표시
+    const criticalErrors = allErrors.filter(function(e) { return e.level === 'error'; });
+    const autofixBox = document.getElementById('autofix-box');
+    if (criticalErrors.length > 0) {
+      autofixBox.style.display = 'block';
+      document.getElementById('autofix-final').style.display = 'none';
+      document.getElementById('autofix-progress').style.display = 'none';
+      document.getElementById('autofix-rounds').innerHTML = '';
+      // API 키 없으면 입력란 표시
+      const savedKey = localStorage.getItem('wfgen_claude_key');
+      if (!savedKey) {
+        document.getElementById('autofix-key-row').style.display = 'block';
+      }
+    } else {
+      autofixBox.style.display = 'none';
+    }
+
     // 워크플로우 localStorage에 저장
     localStorage.setItem('wfgen_last_' + (currentSub.basic?.academy || ''), JSON.stringify(workflow));
 
@@ -1166,6 +1344,465 @@ async function generateWorkflow() {
     loadSubmissions();
   } catch(e) { showAlert('error', '생성 실패: ' + e.message); }
   finally { btn.disabled = false; btn.innerHTML = '&#9889; 워크플로우 생성'; }
+}
+
+// ── Phase 1: 정적 검증 결과 표시 ──
+function showValidationResult(errors) {
+  const card    = document.getElementById('val-card');
+  const icon    = document.getElementById('val-icon');
+  const title   = document.getElementById('val-title');
+  const desc    = document.getElementById('val-desc');
+  const badge   = document.getElementById('val-badge');
+  const body    = document.getElementById('val-body');
+  const agentBtn = document.getElementById('btn-agent-val');
+
+  // 이전 Phase 2 결과 초기화
+  document.getElementById('agent-val-result').style.display = 'none';
+  document.getElementById('agent-api-key-box').style.display = 'none';
+
+  const errs  = errors.filter(function(e) { return e.level === 'error'; });
+  const warns = errors.filter(function(e) { return e.level === 'warning'; });
+
+  // 뱃지 + 아이콘 설정
+  if (errs.length > 0) {
+    icon.style.background = 'var(--red-light)';
+    icon.textContent = '⚠️';
+    badge.textContent = '검증 실패 ' + errs.length + '건';
+    badge.style.cssText = 'margin-left:auto;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;background:var(--red-light);color:var(--red)';
+    title.textContent = '검증 실패 — 수정이 필요합니다';
+    desc.textContent = '아래 오류를 해결한 후 워크플로우를 다시 생성하세요.';
+    card.style.borderLeft = '4px solid var(--red)';
+    agentBtn.disabled = true;
+    agentBtn.title = '오류를 먼저 해결하세요';
+  } else if (warns.length > 0) {
+    icon.style.background = 'var(--orange-light)';
+    icon.textContent = '💡';
+    badge.textContent = '경고 ' + warns.length + '건';
+    badge.style.cssText = 'margin-left:auto;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;background:var(--orange-light);color:var(--orange)';
+    title.textContent = '검증 통과 (경고 있음)';
+    desc.textContent = '워크플로우를 사용할 수 있지만 아래 사항을 확인하세요.';
+    card.style.borderLeft = '4px solid var(--orange)';
+    agentBtn.disabled = false;
+  } else {
+    icon.style.background = 'var(--green-light)';
+    icon.textContent = '✅';
+    badge.textContent = 'PASS';
+    badge.style.cssText = 'margin-left:auto;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;background:var(--green-light);color:var(--green)';
+    title.textContent = '검증 통과';
+    desc.textContent = '정적 분석에서 이슈가 발견되지 않았습니다. AI 심층 검증을 추가로 실행해보세요.';
+    card.style.borderLeft = '4px solid var(--green)';
+    agentBtn.disabled = false;
+  }
+
+  // 이슈 목록 렌더링
+  if (errors.length === 0) {
+    body.innerHTML = '<div style="color:var(--green);font-size:13px;font-weight:600">모든 검사를 통과했습니다.</div>';
+  } else {
+    const items = errors.map(function(e) {
+      const isErr = e.level === 'error';
+      const color = isErr ? 'var(--red)' : 'var(--orange)';
+      const bg    = isErr ? 'var(--red-light)' : 'var(--orange-light)';
+      const label = isErr ? '오류' : '경고';
+      const pattern = e.pattern ? '<span style="font-size:10px;font-weight:700;padding:1px 5px;border-radius:6px;background:rgba(0,0,0,.06);margin-right:4px">' + e.pattern + '</span>' : '';
+      const node  = e.node ? '<span style="font-size:11px;color:var(--text3);margin-left:6px">[' + e.node + ']</span>' : '';
+      return '<div style="display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-radius:8px;background:' + bg + ';margin-bottom:6px">'
+        + '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:' + color + ';color:#fff;flex-shrink:0;margin-top:1px">' + label + '</span>'
+        + '<div><div style="font-size:13px;font-weight:500;color:var(--text)">' + pattern + esc(e.message) + node + '</div>'
+        + (e.autoFixable ? '<div style="font-size:11px;color:var(--text3);margin-top:2px">자동수정 가능</div>' : '')
+        + '</div></div>';
+    }).join('');
+    body.innerHTML = items;
+  }
+}
+
+// ── Phase 2: AI 심층 검증 ──
+async function agentValidateWorkflow() {
+  if (!lastWorkflow) return;
+
+  const apiKey = localStorage.getItem('wfgen_claude_key')
+    || document.getElementById('gen-api-key')?.value?.trim()
+    || document.getElementById('fix-api-key')?.value?.trim()
+    || document.getElementById('r-api-key')?.value?.trim();
+
+  if (!apiKey) {
+    document.getElementById('agent-api-key-box').style.display = 'block';
+    document.getElementById('gen-api-key').focus();
+    return;
+  }
+
+  const btn = document.getElementById('btn-agent-val');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> AI 분석 중... (10~20초)';
+
+  document.getElementById('agent-val-result').style.display = 'none';
+
+  // 워크플로우 요약 (토큰 절약)
+  const summary = {
+    totalNodes: lastWorkflow.nodes.length,
+    nodes: lastWorkflow.nodes.map(function(n) {
+      const s = { name: n.name, type: n.type.replace('n8n-nodes-base.',''), retryOnFail: n.retryOnFail };
+      if (n.type === 'n8n-nodes-base.code' && n.parameters?.jsCode)
+        s.codePreview = n.parameters.jsCode.slice(0, 400);
+      if (n.type === 'n8n-nodes-base.httpRequest')
+        s.url = n.parameters?.url;
+      if (n.credentials) s.credentials = Object.keys(n.credentials);
+      return s;
+    }),
+    connections: Object.keys(lastWorkflow.connections)
+  };
+
+  const systemPrompt = `당신은 n8n 워크플로우 전문가입니다. 워크플로우 요약을 보고 실제 운영에서 생길 문제를 찾아주세요.
+
+## 반드시 확인할 실전 에러 패턴
+
+① Notion API 404: URL의 DB ID가 32자리 hex/UUID인지, credentials 연결 여부
+② 학생 이름 추출 실패: "학생 목록 추출" Code에 이름 파싱 로직 있는지
+③ 수업일지 0건: "수업일지 Body 준비"에 relation 필터가 있는지. formula 필터는 404
+④ Claude JSON 파싱: "HTML 생성" Code에 마크다운 코드블록 제거 로직 있는지, max_tokens≥2000
+⑤ Claude API 529: "Claude API 호출" 노드에 retryOnFail=true 있는지
+⑥ HTML 색상: accent 색상이 너무 밝아 텍스트 안 보이는 경우
+
+## 응답 형식 (JSON만, 마크다운 금지)
+{"verdict":"pass"|"warn"|"fail","issues":[{"pattern":"①~⑥","severity":"error"|"warning","node":"노드명 또는 null","message":"문제 (한국어)","fix":"수정 방법"}],"summary":"1~2줄 요약"}`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: '다음 워크플로우를 검증해주세요:\n\n' + JSON.stringify(summary, null, 2) }]
+      })
+    });
+
+    if (!resp.ok) {
+      const errData = await resp.json().catch(function() { return {}; });
+      if (resp.status === 401) throw new Error('API 키가 올바르지 않습니다. 확인 후 다시 시도하세요.');
+      throw new Error('API 오류 ' + resp.status + ': ' + (errData.error?.message || ''));
+    }
+
+    const data = await resp.json();
+    const text = data.content?.[0]?.text || '';
+    const jsonMatch = text.replace(/```json|```/g, '').trim().match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('AI 응답 파싱 실패');
+
+    const result = JSON.parse(jsonMatch[0]);
+    showAgentValResult(result);
+
+  } catch(e) {
+    showAlert('error', 'AI 검증 오류: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '&#10024; AI 심층 검증';
+  }
+}
+
+// ── 자동 수정 루프 ──────────────────────────────────────
+let fixedWorkflow = null; // 최종 수정된 워크플로우
+
+async function startAutoFixLoop() {
+  const apiKey = localStorage.getItem('wfgen_claude_key')
+    || document.getElementById('gen-api-key')?.value?.trim()
+    || document.getElementById('fix-api-key')?.value?.trim();
+
+  if (!apiKey) {
+    document.getElementById('autofix-key-row').style.display = 'block';
+    document.getElementById('gen-api-key').focus();
+    return;
+  }
+  localStorage.setItem('wfgen_claude_key', apiKey);
+
+  const btn = document.getElementById('btn-autofix');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 수정 중...';
+  document.getElementById('autofix-progress').style.display = 'block';
+  document.getElementById('autofix-final').style.display = 'none';
+  document.getElementById('autofix-rounds').innerHTML = '';
+
+  const MAX_ROUNDS = 3;
+  let current = JSON.parse(JSON.stringify(lastWorkflow));
+  let roundResults = [];
+
+  for (let round = 1; round <= MAX_ROUNDS; round++) {
+    // 1) 정적 자동 수정 먼저 적용
+    autoFix(current);
+
+    // 2) 검증
+    const allErrors  = validateWorkflow(current);
+    const errors     = allErrors.filter(function(e) { return e.level === 'error'; });
+    const warnings   = allErrors.filter(function(e) { return e.level === 'warning'; });
+
+    addRoundBadge(round, errors.length, warnings.length, '분석 중...');
+    setAutofixStatus(`라운드 ${round}/${MAX_ROUNDS} — 에러 ${errors.length}건, 경고 ${warnings.length}건`);
+
+    // 3) 에러 없으면 완료
+    if (errors.length === 0) {
+      updateRoundBadge(round, 'pass', '에러 없음 ✅');
+      showAutofixFinal(current, [], warnings, round);
+      break;
+    }
+
+    // 4) AI 수정 가능한 에러만 필터 (크리덴셜/DB ID 제외)
+    const fixableErrors = errors.filter(function(e) {
+      return !e.message.includes('credential') && !e.message.includes('DbId') && !e.message.includes('DB ID');
+    });
+    const manualErrors = errors.filter(function(e) {
+      return e.message.includes('credential') || e.message.includes('DbId') || e.message.includes('DB ID');
+    });
+
+    if (fixableErrors.length === 0) {
+      // AI가 고칠 수 없는 에러만 남음
+      updateRoundBadge(round, 'manual', `수동 수정 필요 ${manualErrors.length}건`);
+      showAutofixFinal(current, errors, warnings, round);
+      break;
+    }
+
+    // 5) Claude로 수정
+    updateRoundBadge(round, 'fixing', 'Claude 수정 중...');
+    try {
+      const fixed = await claudeFixRound(current, fixableErrors, warnings, apiKey, round);
+      if (fixed) {
+        current = fixed;
+        roundResults.push({ round, fixed: true });
+        updateRoundBadge(round, 'fixed', `${fixableErrors.length}건 수정 완료`);
+      } else {
+        updateRoundBadge(round, 'fail', '수정 실패');
+        break;
+      }
+    } catch(e) {
+      updateRoundBadge(round, 'fail', '오류: ' + e.message);
+      showAlert('error', `라운드 ${round} 오류: ` + e.message);
+      break;
+    }
+
+    // 마지막 라운드 후 최종 검증
+    if (round === MAX_ROUNDS) {
+      autoFix(current);
+      const finalErrors   = validateWorkflow(current).filter(function(e) { return e.level === 'error'; });
+      const finalWarnings = validateWorkflow(current).filter(function(e) { return e.level === 'warning'; });
+      showAutofixFinal(current, finalErrors, finalWarnings, round);
+    }
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '&#128260; AI 자동 수정 다시 실행';
+}
+
+async function claudeFixRound(workflow, errors, warnings, apiKey, round) {
+  // 코드 노드만 추출 (수정 대상)
+  const codeNodes = workflow.nodes.filter(function(n) { return n.type === 'n8n-nodes-base.code'; });
+  const codeNodeStr = codeNodes.map(function(n) {
+    return '=== 노드: ' + n.name + ' ===\n' + (n.parameters?.jsCode || '(없음)');
+  }).join('\n\n');
+
+  const errorStr = errors.map(function(e, i) {
+    return `${i+1}. [${e.pattern || '일반'}] ${e.node ? '[' + e.node + '] ' : ''}${e.message}`;
+  }).join('\n');
+
+  const warnStr = warnings.length > 0
+    ? '\n\n## 경고 (참고용)\n' + warnings.map(function(w) {
+        return `- [${w.pattern || '일반'}] ${w.node ? '[' + w.node + '] ' : ''}${w.message}`;
+      }).join('\n')
+    : '';
+
+  const prompt = `당신은 n8n 워크플로우 디버깅 전문가입니다. 아래 에러를 수정해주세요. (라운드 ${round}/3)
+
+## 발견된 에러
+${errorStr}${warnStr}
+
+## 현재 Code 노드 코드
+${codeNodeStr}
+
+## n8n 핵심 규칙
+- fetch() 사용 가능 (this.helpers.httpRequest 금지)
+- $input.item.json / $input.first().json 으로 데이터 접근
+- return { json: {...} } 또는 return [{ json: {...} }, ...]
+- 템플릿 리터럴 안에 복잡한 표현식(||, &&) 금지 → 변수로 먼저 추출
+- Claude 응답 파싱 시 마크다운 코드블록 제거: text.replace(/\`\`\`json|\`\`\`/gi,'').trim()
+- 수업일지 필터: relation 또는 rich_text 사용 (formula 금지)
+
+## 응답 형식 (순수 JSON만, 마크다운 코드블록 절대 금지)
+{
+  "analysis": "에러 원인 분석 (한국어, 2-3문장)",
+  "fixes": [
+    {
+      "nodeName": "수정할 노드의 정확한 이름",
+      "fixedCode": "수정된 전체 JavaScript 코드",
+      "description": "수정 내용 (한국어)"
+    }
+  ]
+}`;
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8000,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+
+  if (!resp.ok) {
+    if (resp.status === 401) throw new Error('API 키가 올바르지 않습니다');
+    if (resp.status === 529) throw new Error('Claude API 과부하. 잠시 후 다시 시도하세요');
+    throw new Error('API 오류 ' + resp.status);
+  }
+
+  const data = await resp.json();
+  const text = data.content?.[0]?.text || '';
+  const jsonMatch = text.replace(/```json|```/g, '').trim().match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('AI 응답 파싱 실패');
+
+  const result = JSON.parse(jsonMatch[0]);
+  if (!result.fixes || result.fixes.length === 0) return workflow;
+
+  // 수정 적용
+  const updated = JSON.parse(JSON.stringify(workflow));
+  result.fixes.forEach(function(fix) {
+    const node = updated.nodes.find(function(n) { return n.name === fix.nodeName; });
+    if (node && node.type === 'n8n-nodes-base.code' && fix.fixedCode) {
+      node.parameters = node.parameters || {};
+      node.parameters.jsCode = fix.fixedCode;
+    }
+  });
+
+  return updated;
+}
+
+// ── 자동수정 루프 UI 헬퍼 ──
+function setAutofixStatus(msg) {
+  document.getElementById('autofix-status').textContent = msg;
+}
+
+function addRoundBadge(round, errCount, warnCount, statusText) {
+  const wrap = document.getElementById('autofix-rounds');
+  const div = document.createElement('div');
+  div.id = 'round-' + round;
+  div.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:var(--surface2);margin-bottom:6px;font-size:12px';
+  div.innerHTML = `<span style="font-weight:700;color:var(--accent)">Round ${round}</span>`
+    + `<span style="color:var(--text2)">에러 ${errCount}건 / 경고 ${warnCount}건</span>`
+    + `<span id="round-status-${round}" style="margin-left:auto;font-weight:600;color:var(--text3)">${esc(statusText)}</span>`;
+  wrap.appendChild(div);
+}
+
+function updateRoundBadge(round, state, text) {
+  const el = document.getElementById('round-status-' + round);
+  if (!el) return;
+  const colors = { pass: 'var(--green)', fixed: 'var(--accent)', fail: 'var(--red)', manual: 'var(--orange)', fixing: 'var(--text3)' };
+  el.style.color = colors[state] || 'var(--text3)';
+  el.textContent = text;
+}
+
+function showAutofixFinal(workflow, errors, warnings, rounds) {
+  fixedWorkflow = workflow;
+  const card  = document.getElementById('autofix-final-card');
+  const icon  = document.getElementById('autofix-final-icon');
+  const title = document.getElementById('autofix-final-title');
+  const desc  = document.getElementById('autofix-final-desc');
+  const issues = document.getElementById('autofix-remaining-issues');
+
+  document.getElementById('autofix-final').style.display = 'block';
+  setAutofixStatus(errors.length === 0
+    ? `✅ 수정 완료 — ${rounds}라운드 만에 모든 에러 해결`
+    : `⚠️ ${rounds}라운드 완료 — 에러 ${errors.length}건 남음`);
+
+  if (errors.length === 0) {
+    icon.textContent = '✅'; icon.style.background = 'var(--green-light)';
+    title.textContent = '자동 수정 완료';
+    desc.textContent = `${rounds}라운드 만에 모든 에러가 해결되었습니다. 아래에서 다운로드하세요.`;
+    card.style.borderLeft = '4px solid var(--green)';
+    issues.innerHTML = warnings.length > 0
+      ? '<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">남은 경고 (워크플로우 동작에 영향 없음)</div>'
+        + warnings.map(function(w) {
+            return '<div style="font-size:12px;padding:4px 8px;background:var(--orange-light);border-radius:6px;margin-bottom:4px;color:var(--orange)">'
+              + (w.pattern ? '[' + w.pattern + '] ' : '') + esc(w.message) + '</div>';
+          }).join('')
+      : '<div style="color:var(--green);font-size:13px">경고도 없습니다 🎉</div>';
+  } else {
+    icon.textContent = '⚠️'; icon.style.background = 'var(--orange-light)';
+    title.textContent = '부분 수정 완료';
+    desc.textContent = `자동 수정 불가 에러 ${errors.length}건이 남아있습니다. 아래 항목을 수동으로 확인하세요.`;
+    card.style.borderLeft = '4px solid var(--orange)';
+    issues.innerHTML = '<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">수동 수정 필요 항목</div>'
+      + errors.map(function(e) {
+          return '<div style="font-size:12px;padding:6px 10px;background:var(--red-light);border-radius:6px;margin-bottom:4px;color:var(--red)">'
+            + '<strong>' + (e.pattern ? '[' + e.pattern + '] ' : '') + (e.node ? '[' + e.node + '] ' : '') + '</strong>'
+            + esc(e.message) + '</div>';
+        }).join('');
+  }
+
+  // 검증 결과도 갱신
+  showValidationResult(validateWorkflow(fixedWorkflow));
+}
+
+function downloadFixedWorkflow() {
+  if (!fixedWorkflow) return;
+  const name = (currentSub?.basic?.academy || 'workflow').replace(/\s+/g, '_');
+  const blob = new Blob([JSON.stringify(fixedWorkflow, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `${name}_fixed.json`; a.click(); URL.revokeObjectURL(a.href);
+}
+
+function copyFixedWorkflow() {
+  if (!fixedWorkflow) return;
+  navigator.clipboard.writeText(JSON.stringify(fixedWorkflow, null, 2))
+    .then(function() { showAlert('success', '수정된 JSON이 클립보드에 복사되었습니다.'); });
+}
+
+function showAgentValResult(result) {
+  const wrap   = document.getElementById('agent-val-result');
+  const card   = document.getElementById('agent-val-card');
+  const badge  = document.getElementById('agent-val-badge');
+  const desc   = document.getElementById('agent-val-desc');
+  const summary = document.getElementById('agent-val-summary');
+  const issues  = document.getElementById('agent-val-issues');
+
+  wrap.style.display = 'block';
+
+  const verdictMap = {
+    pass: { label: 'PASS', bg: 'var(--green-light)',  color: 'var(--green)',  border: 'var(--green)',  text: '이슈 없음' },
+    warn: { label: '경고', bg: 'var(--orange-light)', color: 'var(--orange)', border: 'var(--orange)', text: '경고 있음 — 확인 권장' },
+    fail: { label: '실패', bg: 'var(--red-light)',    color: 'var(--red)',    border: 'var(--red)',    text: '치명적 이슈 발견' }
+  };
+  const v = verdictMap[result.verdict] || verdictMap.warn;
+  badge.textContent = v.label;
+  badge.style.cssText = 'margin-left:auto;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;background:' + v.bg + ';color:' + v.color;
+  card.style.borderLeft = '4px solid ' + v.border;
+  desc.textContent = v.text;
+  summary.textContent = result.summary || '';
+
+  if (!result.issues || result.issues.length === 0) {
+    issues.innerHTML = '<div style="color:var(--green);font-size:13px;font-weight:600">AI 분석에서 추가 이슈가 발견되지 않았습니다.</div>';
+    return;
+  }
+
+  issues.innerHTML = result.issues.map(function(issue) {
+    const isErr = issue.severity === 'error';
+    const color = isErr ? 'var(--red)' : 'var(--orange)';
+    const bg    = isErr ? 'var(--red-light)' : 'var(--orange-light)';
+    return '<div style="padding:10px 12px;border-radius:8px;background:' + bg + ';margin-bottom:8px">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+      + '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:' + color + ';color:#fff">' + (isErr ? '오류' : '경고') + '</span>'
+      + '<span style="font-size:12px;font-weight:700;padding:1px 6px;border-radius:6px;background:rgba(0,0,0,.06)">' + esc(issue.pattern || '') + '</span>'
+      + (issue.node ? '<span style="font-size:11px;color:var(--text3)">[' + esc(issue.node) + ']</span>' : '')
+      + '</div>'
+      + '<div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px">' + esc(issue.message || '') + '</div>'
+      + '<div style="font-size:11px;color:var(--text2)">→ ' + esc(issue.fix || '') + '</div>'
+      + '</div>';
+  }).join('');
 }
 
 function copyJson() {
@@ -1531,6 +2168,136 @@ function downloadRegenJson() {
   const blob = new Blob([JSON.stringify(lastRegenWorkflow, null, 2)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = `${name}_revised_workflow.json`; a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ══════════════════════════════════════════════
+// ── 샘플 HTML 디자인 추출 ──
+// ══════════════════════════════════════════════
+
+let sampleHtmlContent = null;
+
+function uploadSampleHtml(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    sampleHtmlContent = e.target.result;
+    document.getElementById('sample-html-status').textContent = file.name + ' (' + Math.round(file.size/1024) + 'KB)';
+    document.getElementById('sample-html-preview').style.display = '';
+    // iframe 미리보기
+    const iframe = document.getElementById('sample-html-iframe');
+    iframe.srcdoc = sampleHtmlContent;
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+function clearSampleHtml() {
+  sampleHtmlContent = null;
+  document.getElementById('sample-html-file').value = '';
+  document.getElementById('sample-html-status').textContent = '';
+  document.getElementById('sample-html-preview').style.display = 'none';
+  document.getElementById('extracted-design').style.display = 'none';
+}
+
+async function extractDesignFromSample() {
+  if (!sampleHtmlContent) { showAlert('error', '샘플 HTML을 먼저 업로드해주세요.'); return; }
+  const apiKey = document.getElementById('fix-api-key')?.value?.trim() || localStorage.getItem('wfgen_claude_key') || '';
+  if (!apiKey) { showAlert('error', 'Claude API Key가 필요합니다. n8n 코드 수정 탭에서 입력해주세요.'); return; }
+
+  showAlert('success', '디자인 추출 중...');
+
+  try {
+    // CSS만 추출 (전체 HTML 보내면 토큰 낭비)
+    const styleMatch = sampleHtmlContent.match(/<style[^>]*>([\s\S]*?)<\/style>/gi);
+    const cssContent = styleMatch ? styleMatch.map(s => s.replace(/<\/?style[^>]*>/gi, '')).join('\n') : '';
+    // 헤더 부분 추출
+    const headerMatch = sampleHtmlContent.match(/<header[\s\S]*?<\/header>/i) || sampleHtmlContent.match(/class="header"[\s\S]*?<\/div>/i);
+    const headerSnippet = headerMatch ? headerMatch[0].slice(0, 500) : '';
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4000,
+        messages: [{ role: 'user', content: `이 HTML 보고서의 디자인 시스템을 분석하여 JSON으로 추출하세요.
+
+=== CSS ===
+${cssContent.slice(0, 8000)}
+
+=== 헤더 HTML ===
+${headerSnippet}
+
+다음 JSON 구조로 출력하세요 (순수 JSON만, 마크다운 코드블록 금지):
+{
+  "accent1": "#hex (메인 브랜드 색상, 헤더/링크/강조에 사용되는 색)",
+  "accent2": "#hex (보조 색상, 초록/민트 계열 주로)",
+  "accent3": "#hex (경고/주의 색상, 주황 계열)",
+  "accent4": "#hex (부정/위험 색상, 빨강 계열)",
+  "headerGradient": "linear-gradient(...) (헤더 배경 그라디언트 CSS)",
+  "bgColor": "#hex (배경색)",
+  "surfaceColor": "#hex (카드 배경색)",
+  "textPrimary": "#hex (주 텍스트 색상)",
+  "fullCss": "전체 :root CSS 변수 블록 (:root { ... } 부분만)"
+}` }],
+      }),
+    });
+
+    const apiData = await resp.json();
+    if (apiData.error) throw new Error(apiData.error.message);
+
+    let raw = (apiData.content || []).find(b => b.type === 'text')?.text || '{}';
+    raw = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+
+    let design;
+    try { design = JSON.parse(raw); }
+    catch(e2) { const m = raw.match(/\{[\s\S]*\}/); design = m ? JSON.parse(m[0]) : {}; }
+
+    // UI에 결과 표시
+    document.getElementById('ex-accent1').value = design.accent1 || '#3b6ef6';
+    document.getElementById('ex-accent2').value = design.accent2 || '#12b886';
+    document.getElementById('ex-accent3').value = design.accent3 || '#f76707';
+    document.getElementById('ex-accent4').value = design.accent4 || '#e64980';
+    document.getElementById('ex-accent1-hex').textContent = design.accent1 || '';
+    document.getElementById('ex-accent2-hex').textContent = design.accent2 || '';
+    document.getElementById('ex-accent3-hex').textContent = design.accent3 || '';
+    document.getElementById('ex-accent4-hex').textContent = design.accent4 || '';
+    document.getElementById('ex-gradient').value = design.headerGradient || '';
+    document.getElementById('ex-full-css').value = design.fullCss || cssContent.slice(0, 5000);
+    document.getElementById('extracted-design').style.display = '';
+
+    // 색상 변경 이벤트
+    ['ex-accent1','ex-accent2','ex-accent3','ex-accent4'].forEach(function(id) {
+      document.getElementById(id).onchange = function() {
+        document.getElementById(id + '-hex').textContent = this.value;
+      };
+    });
+
+    // 현재 submission에 저장
+    if (currentSub) {
+      const extractedDesign = {
+        mainColor: design.accent1 || '#3b6ef6',
+        subColor: design.accent2 || '#12b886',
+        warnColor: design.accent3 || '#f76707',
+        positiveColor: design.accent4 || '#e64980',
+        headerGradient: design.headerGradient || '',
+        customCss: design.fullCss || '',
+        sampleHtml: sampleHtmlContent ? '(uploaded)' : '',
+      };
+      dbUpdate(currentSub._meta.fileName, { design: extractedDesign });
+      currentSub.design = extractedDesign;
+    }
+
+    showAlert('success', '디자인 추출 완료! 색상을 수동으로 조정할 수도 있습니다.');
+
+  } catch(e) {
+    showAlert('error', '디자인 추출 실패: ' + e.message);
+  }
 }
 
 // ══════════════════════════════════════════════
