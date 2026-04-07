@@ -1842,8 +1842,32 @@ function showAlert(type, msg) {
 }
 
 function copyIntakeLink() {
-  const url = window.location.origin + window.location.pathname.replace(/index\.html$/, '') + 'intake.html';
-  navigator.clipboard.writeText(url).then(() => alert('복사됨: ' + url));
+  const base = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
+  const serverUrl = document.getElementById('server-url')?.value?.trim();
+  const url = serverUrl ? serverUrl + '/intake' : (base + 'intake.html');
+
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(url).then(function() {
+      showAlert('success', '&#128279; 고객 폼 링크가 복사되었습니다!<br><small style="word-break:break-all">' + url + '</small>');
+    }).catch(function() { fallbackCopy(url); });
+  } else {
+    fallbackCopy(url);
+  }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  try {
+    document.execCommand('copy');
+    showAlert('success', '&#128279; 고객 폼 링크가 복사되었습니다!<br><small style="word-break:break-all">' + text + '</small>');
+  } catch(e) {
+    showAlert('error', '복사 실패. 아래 링크를 직접 복사해주세요:<br><small style="word-break:break-all">' + text + '</small>');
+  }
+  document.body.removeChild(ta);
 }
 
 function copyWorkflowLink() {
@@ -2304,7 +2328,6 @@ ${headerSnippet}
 // ── n8n 코드 수정 기능 (히스토리 + 고도화) ──
 // ══════════════════════════════════════════════
 
-let fixedWorkflow = null;
 let errorImageBase64 = null;
 let fixRound = 0; // 연속 수정 횟수
 let fixSessionHistory = []; // 현재 세션의 수정 이력 (프롬프트용)
